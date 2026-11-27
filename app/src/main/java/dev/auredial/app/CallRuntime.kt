@@ -1,7 +1,7 @@
 package dev.auredial.app
 
 import android.Manifest
-import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -41,7 +41,8 @@ import java.util.UUID
 
 data class CallView(val id: String, val name: String?, val number: String?, val state: Int,
                     val canHold: Boolean, val canMerge: Boolean, val connectedAt: Long, val verificationFailed: Boolean,
-                    val accounts: List<Pair<PhoneAccountHandle, String>>)
+                    val accounts: List<Pair<PhoneAccountHandle, String>>,
+                    val fromContacts: Boolean = false, val accountLabel: String? = null)
 data class RouteView(val key: String, val name: String)
 data class CallUi(val calls: List<CallView> = emptyList(), val muted: Boolean = false,
                   val routes: List<RouteView> = emptyList(), val currentRoute: String? = null,
@@ -58,7 +59,6 @@ object CallRuntime {
     fun action(id: String, action: String) { service?.action(id, action) }
     fun route(key: String) { service?.route(key) }
     fun selectAccount(id: String, account: PhoneAccountHandle) { service?.selectAccount(id,account) }
-    fun visible(visible: Boolean) { service?.visible(visible) }
 }
 
 class CallActionReceiver : BroadcastReceiver() {
@@ -75,22 +75,25 @@ class AureInCallService : InCallService() {
         var lookupNumber: String? = null
         var localName: String? = null
         var lookupJob: Job? = null
+        var account: PhoneAccountHandle? = null
+        var accountLabel: String? = null
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val entries = LinkedHashMap<Call, Entry>()
     private val main = Handler(Looper.getMainLooper())
-    private val incomingChannel = "incoming_v2"
+    private val incomingChannel = INCOMING_CALL_CHANNEL
     private val ongoingChannel = "ongoing_v2"
     private var muted = false
     private var legacyMask = 0
     private var legacyRoute = 0
     private var endpoints: List<CallEndpoint> = emptyList()
     private var endpointKey: String? = null
-    private var visible = false
+    private var foreground = false
     private var announcement: VoicePreview? = null
     private val voiceSession = AnnouncementSession()
     private var ringingVoiceId: String? = null
+    private var ringingNotificationId: String? = null
     private var dtmfCall: Call? = null
     private val stopTone = Runnable { dtmfCall?.stopDtmfTone(); dtmfCall = null }
     private val retryVoice = Runnable { maybeAnnounce() }
@@ -113,7 +116,7 @@ class AureInCallService : InCallService() {
         val callback = object : Call.Callback() {
             override fun onStateChanged(call: Call, state: Int) = refresh()
             override fun onDetailsChanged(call: Call, details: Call.Details) {
-                entries[call]?.let(::resolveLocalName)
+                entries[call]?.let(::resolveIdentity)
                 refresh()
             }
             override fun onConferenceableCallsChanged(call: Call, conferenceableCalls: MutableList<Call>) = refresh()
@@ -122,7 +125,7 @@ class AureInCallService : InCallService() {
         val entry = Entry(call, UUID.randomUUID().toString(), callback)
         entries[call] = entry
         call.registerCallback(callback, main)
-        resolveLocalName(entry)
+        resolveIdentity(entry)
         refresh()
     }
     override fun onCallRemoved(call: Call) {
@@ -135,7 +138,7 @@ class AureInCallService : InCallService() {
         super.onCallRemoved(call)
     }
     override fun onBringToForeground(showDialpad: Boolean) {
-        runCatching { startActivity(Intent(this,CallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("dialpad",showDialpad)) }
+        runCatching { startActivity(callScreenIntent(this).putExtra("dialpad",showDialpad)) }
     }
     override fun onSilenceRinger() {
         voiceSession.suppress(currentRinging()?.id)
@@ -160,14 +163,19 @@ class AureInCallService : InCallService() {
     override fun onMuteStateChanged(isMuted: Boolean) { muted=isMuted; publish() }
 
     private fun live() = entries.values.filter { it.call.state != Call.STATE_DISCONNECTED }
-    private fun currentRinging() = live().firstOrNull { it.call.state == Call.STATE_RINGING }
+    private fun currentRinging() = live().firstOrNull { isIncomingRinging(it.call.state) }
     private fun primary() = currentRinging() ?: live().firstOrNull { it.call.state == Call.STATE_ACTIVE } ?: live().firstOrNull()
     private fun presentedNumber(details: Call.Details): String? =
         details.handle?.takeIf {
             details.handlePresentation == TelecomManager.PRESENTATION_ALLOWED && it.scheme == "tel"
         }?.schemeSpecificPart
 
-    private fun resolveLocalName(entry: Entry) {
+    private fun resolveIdentity(entry: Entry) {
+        val account = entry.call.details.accountHandle
+        if (entry.account != account) {
+            entry.account = account
+            entry.accountLabel = if (account == null) null else accounts(this).firstOrNull { it.first == account }?.second
+        }
         val number = presentedNumber(entry.call.details)
         if (number == entry.lookupNumber) return
         entry.lookupJob?.cancel()
@@ -196,15 +204,17 @@ class AureInCallService : InCallService() {
         val call = entry.call
         val details = call.details
         val number = presentedNumber(details)
+        val localName = contactName(entry)
         val networkName = details.callerDisplayName?.takeIf {
             number != null && details.callerDisplayNamePresentation == TelecomManager.PRESENTATION_ALLOWED && it.isNotBlank()
         }
         return CallView(
-            entry.id, contactName(entry) ?: networkName, number, call.state,
+            entry.id, localName ?: networkName, number, call.state,
             details.can(Call.Details.CAPABILITY_HOLD),
             details.can(Call.Details.CAPABILITY_MERGE_CONFERENCE) || call.conferenceableCalls.isNotEmpty(),
             details.connectTimeMillis, number != null && details.failedVerification(),
             if (call.state == Call.STATE_SELECT_PHONE_ACCOUNT) callAccounts(details) else emptyList(),
+            fromContacts = localName != null, accountLabel = entry.accountLabel,
         )
     }
 
@@ -216,8 +226,8 @@ class AureInCallService : InCallService() {
     }
     private fun refresh() {
         publish()
-        maybeAnnounce()
         updateNotification()
+        maybeAnnounce()
     }
     private data class NotificationKey(val id: String, val state: Int, val title: String)
     private var notificationKey: NotificationKey? = null
@@ -226,39 +236,64 @@ class AureInCallService : InCallService() {
             .putExtra("call",id).putExtra("command",command),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     private fun updateNotification() {
-        val manager=getSystemService(NotificationManager::class.java)
-        val e=primary()
-        if(e==null) { manager.cancel(72); notificationKey=null; return }
-        val v=view(e); val incoming=v.state==Call.STATE_RINGING
-        val title = v.name ?: v.number ?: getString(R.string.unknown_caller)
-        val key = NotificationKey(v.id, v.state, title)
-        if (Build.VERSION.SDK_INT >= 33 && !hasPermission(Manifest.permission.POST_NOTIFICATIONS)) return
-        if (notificationKey == key) return
-        val newIncoming = incoming && (notificationKey?.id != v.id || notificationKey?.state != Call.STATE_RINGING)
-        val open=PendingIntent.getActivity(this,72,Intent(this,CallActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val builder=Notification.Builder(this,if(incoming) incomingChannel else ongoingChannel)
-            .setSmallIcon(android.R.drawable.sym_action_call).setContentTitle(title)
-            .setContentText(getString(if(incoming) R.string.incoming_call else R.string.ongoing_call))
-            .setCategory(Notification.CATEGORY_CALL).setVisibility(Notification.VISIBILITY_PRIVATE)
-            .setOngoing(true).setContentIntent(open).setOnlyAlertOnce(true)
-        if(Build.VERSION.SDK_INT>=31) {
-            val person=Person.Builder().setName(title).build()
-            builder.setStyle(if(incoming) Notification.CallStyle.forIncomingCall(person,pending(v.id,"reject"),pending(v.id,"answer"))
-                else Notification.CallStyle.forOngoingCall(person,pending(v.id,"end")))
-        } else {
-            if(incoming) builder.addAction(Notification.Action.Builder(null,getString(R.string.answer),pending(v.id,"answer")).build())
-            builder.addAction(Notification.Action.Builder(null,getString(if(incoming) R.string.reject else R.string.end_call),pending(v.id,if(incoming) "reject" else "end")).build())
+        val manager = getSystemService(NotificationManager::class.java)
+        val entry = primary()
+        if (entry == null) {
+            removeCallNotification()
+            return
         }
-        if(newIncoming && (Build.VERSION.SDK_INT<34 || manager.canUseFullScreenIntent())) builder.setFullScreenIntent(open,true)
-        if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-            if (runCatching { manager.notify(72, builder.build()) }.isSuccess) notificationKey = key
+        val call = view(entry)
+        val incoming = isIncomingRinging(call.state)
+        val title = call.name ?: call.number ?: getString(R.string.unknown_caller)
+        val key = NotificationKey(call.id, call.state, title)
+        if (!manager.areNotificationsEnabled() || notificationKey == key) return
+        val newIncoming = incoming && ringingNotificationId != call.id
+        val open = PendingIntent.getActivity(this, CALL_NOTIFICATION_ID, callScreenIntent(this),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val builder = Notification.Builder(this, if (incoming) incomingChannel else ongoingChannel)
+            .setSmallIcon(android.R.drawable.sym_action_call)
+            .setContentTitle(title)
+            .setContentText(getString(if (incoming) R.string.incoming_call else R.string.ongoing_call))
+            .setCategory(Notification.CATEGORY_CALL)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setOngoing(true)
+            .setContentIntent(open)
+            .setOnlyAlertOnce(!newIncoming)
+        if (Build.VERSION.SDK_INT >= 31) {
+            val person = Person.Builder().setName(title).build()
+            builder.setStyle(if (incoming) Notification.CallStyle.forIncomingCall(person, pending(call.id, "reject"), pending(call.id, "answer"))
+                else Notification.CallStyle.forOngoingCall(person, pending(call.id, "end")))
+            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
+        } else {
+            if (incoming) builder.addAction(Notification.Action.Builder(null, getString(R.string.answer), pending(call.id, "answer")).build())
+            val label = if (incoming) R.string.reject else R.string.end_call
+            builder.addAction(Notification.Action.Builder(null, getString(label), pending(call.id, if (incoming) "reject" else "end")).build())
+        }
+        // Keep the full-screen intent when contact lookup refreshes the same incoming call.
+        if (incoming) builder.setFullScreenIntent(open, true)
+        val notification = builder.build()
+        if (!foreground && isDialer()) {
+            foreground = runCatching {
+                startForeground(CALL_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
+            }.isSuccess
+            if (foreground) {
+                notificationKey = key
+                if (incoming) ringingNotificationId = call.id
+                return
+            }
+        }
+        if (runCatching { manager.notify(CALL_NOTIFICATION_ID, notification) }.isSuccess) {
+            notificationKey = key
+            if (incoming) ringingNotificationId = call.id
         }
     }
 
-    internal fun visible(value: Boolean) {
-        visible = value
-        maybeAnnounce()
+    private fun removeCallNotification() {
+        if (foreground) stopForeground(STOP_FOREGROUND_REMOVE)
+        foreground = false
+        if (notificationKey != null) getSystemService(NotificationManager::class.java).cancel(CALL_NOTIFICATION_ID)
+        notificationKey = null
+        ringingNotificationId = null
     }
 
     private fun stopVoice() {
@@ -276,16 +311,20 @@ class AureInCallService : InCallService() {
         val settings = readVoiceSettings(this)
         val silenced = entry?.call?.details?.extras?.getBoolean(Call.EXTRA_SILENT_RINGING_REQUESTED) == true
         val eligible = entry != null && live().size == 1 && settings.enabled && !silenced
-        val player = if (eligible && visible) announcement ?: VoicePreview(this).also { announcement = it } else announcement
-        when (voiceSession.update(entry?.id, eligible, visible, player?.isReady == true, SystemClock.elapsedRealtime())) {
+        val player = if (eligible) {
+            announcement ?: VoicePreview(this, incomingCall = true).also { announcement = it }
+        } else announcement
+        val identity = entry?.let {
+            speakerIdentity(contactName(it), presentedNumber(it.call.details), settings.contactsOnly)
+                ?: getString(R.string.unknown_caller).takeUnless { settings.contactsOnly }
+        }
+        when (voiceSession.update(entry?.id, eligible, player?.isReady == true && identity != null, SystemClock.elapsedRealtime())) {
             AnnouncementAction.STOP -> stopVoice()
             AnnouncementAction.WAIT -> if (player != null && (player.isLoading || player.isReady)) {
                 main.postDelayed(retryVoice, 100L)
             }
-            AnnouncementAction.SPEAK -> if (entry != null) {
-                val identity = speakerIdentity(contactName(entry), presentedNumber(entry.call.details), settings.contactsOnly)
-                    ?: getString(R.string.unknown_caller).takeUnless { settings.contactsOnly }
-                if (identity != null) player?.playAnnouncement(getString(R.string.announce_caller, identity))
+            AnnouncementAction.SPEAK -> if (identity != null) {
+                player?.playAnnouncement(getString(R.string.announce_caller, identity))
             }
             AnnouncementAction.KEEP -> Unit
         }
@@ -294,15 +333,15 @@ class AureInCallService : InCallService() {
     internal fun action(id:String, action:String) {
         val c=entries.values.firstOrNull { it.id==id }?.call ?: return
         if(c.state==Call.STATE_DISCONNECTED) return
-        if (c.state == Call.STATE_RINGING && (action == "answer" || action == "reject" || action == "end")) {
+        if (isIncomingRinging(c.state) && (action == "answer" || action == "reject" || action == "end")) {
             voiceSession.suppress(id)
             stopVoice()
         }
         runCatching {
             when(action) {
-                "answer" -> if(c.state==Call.STATE_RINGING) c.answer(VideoProfile.STATE_AUDIO_ONLY)
-                "reject" -> if(c.state==Call.STATE_RINGING) c.reject(false,null)
-                "end" -> if(c.state==Call.STATE_RINGING) c.reject(false,null) else c.disconnect()
+                "answer" -> if(isIncomingRinging(c.state)) c.answer(VideoProfile.STATE_AUDIO_ONLY)
+                "reject" -> if(isIncomingRinging(c.state)) c.reject(false,null)
+                "end" -> if(isIncomingRinging(c.state)) c.reject(false,null) else c.disconnect()
                 "mute" -> if(c.state==Call.STATE_ACTIVE) setMuted(!muted)
                 "hold" -> if(c.state==Call.STATE_ACTIVE && c.details.can(Call.Details.CAPABILITY_HOLD)) c.hold() else if(c.state==Call.STATE_HOLDING) c.unhold()
                 "merge" -> if(c.state==Call.STATE_ACTIVE) {
@@ -350,8 +389,21 @@ class AureInCallService : InCallService() {
     override fun onDestroy() {
         main.removeCallbacksAndMessages(null); scope.cancel(); stopTone.run(); announcement?.close()
         entries.values.forEach { it.call.unregisterCallback(it.callback) }; entries.clear()
-        getSystemService(NotificationManager::class.java).cancel(72)
+        removeCallNotification()
         CallRuntime.publish(this,CallUi()); if(CallRuntime.service===this) CallRuntime.service=null
         super.onDestroy()
     }
 }
+
+internal const val CALL_NOTIFICATION_ID = 72
+internal const val INCOMING_CALL_CHANNEL = "incoming_v2"
+
+internal fun isIncomingRinging(state: Int): Boolean =
+    state == Call.STATE_RINGING || (Build.VERSION.SDK_INT >= 30 && state == Call.STATE_SIMULATED_RINGING)
+
+internal fun canShowCallFullScreen(context: Context): Boolean =
+    Build.VERSION.SDK_INT < 34 || context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+
+internal fun callScreenIntent(context: Context) =
+    Intent(context, CallActivity::class.java)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)

@@ -1,7 +1,7 @@
 package dev.auredial.domain
 
 private const val IDENTITY_GRACE_MS = 350L
-private const val ANNOUNCEMENT_WINDOW_MS = 6_000L
+private const val ANNOUNCEMENT_WINDOW_MS = 9_000L
 
 enum class AnnouncementAction { STOP, WAIT, SPEAK, KEEP }
 
@@ -19,7 +19,6 @@ class AnnouncementSession {
     fun update(
         ringingId: String?,
         eligible: Boolean,
-        visible: Boolean,
         ready: Boolean,
         now: Long,
     ): AnnouncementAction {
@@ -30,7 +29,7 @@ class AnnouncementSession {
             spoke = false
         }
         if (!eligible) suppressed = true
-        if (ringingId == null || suppressed || !visible) return AnnouncementAction.STOP
+        if (ringingId == null || suppressed) return AnnouncementAction.STOP
         if (spoke) return AnnouncementAction.KEEP
         val age = now - ringingSince
         if (age >= ANNOUNCEMENT_WINDOW_MS) return AnnouncementAction.STOP

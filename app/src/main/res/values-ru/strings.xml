@@ -38,10 +38,9 @@
 <string name="sim_number">SIM %1$d</string>
 <string name="announce_caller">Входящий звонок. %1$s</string>
 <string name="announce_enabled">Озвучивать абонента</string>
-<string name="announce_limit">Офлайн-голос на открытом экране входящего вызова. Учитывает беззвучный режим и «Не беспокоить».</string>
-<string name="default_note">Назначь AureDial основной звонилкой для истории и управления звонками.</string>
+<string name="announce_limit">Диктор озвучивает абонента во время звонка, даже если открыто другое приложение. Нужен офлайн-голос. Действуют беззвучный режим и «Не беспокоить».</string>
+<string name="default_note">Назначь AureDial приложением «Телефон» по умолчанию, чтобы принимать вызовы здесь.</string>
 <string name="set_default">Назначить основной звонилкой</string>
-<string name="beta_notice">Инженерная бета: только для запасного телефона. Уведомления, звук и экстренные вызовы не проверены на устройстве. После теста верни прежнюю звонилку.</string>
 <string name="permissions">Разрешения</string>
 <string name="notifications">Включить уведомления</string>
 <string name="fullscreen">Полноэкранные вызовы</string>
@@ -70,4 +69,17 @@
 <string name="rejected_call">Отклонённый вызов</string>
 <string name="blocked_call">Заблокированный вызов</string>
 <string name="close_details">Закрыть</string>
+<string name="receive_calls_title">Приём звонков</string>
+<string name="call_alerts_needed">Разреши уведомления, чтобы «Принять» и «Отклонить» появлялись поверх других приложений.</string>
+<string name="call_channel_needed">Включи уведомления входящих вызовов и их показ во всплывающем окне.</string>
+<string name="call_full_screen_needed">Разреши полноэкранные уведомления, чтобы окно ответа открывалось на экране блокировки.</string>
+<string name="call_setup_ready">AureDial назначен звонилкой. Уведомления о звонках включены.</string>
+<string name="incoming_call_settings">Уведомления входящих</string>
+<string name="call_identity_permissions">Разрешить доступ к контактам и данным SIM</string>
+<string name="open_call">К разговору</string>
+<string name="from_contacts">Из контактов</string>
+<string name="other_call">Другой вызов · %1$s</string>
+<string name="all_contacts">Все контакты</string>
+<string name="install_voice">Установить офлайн-голос</string>
+<string name="open_tts_manually">Открой настройки синтеза речи Android и установи голос для своего языка.</string>
 </resources>

@@ -39,10 +39,9 @@
 <string name="sim_number">SIM %1$d</string>
 <string name="announce_caller">Incoming call. %1$s</string>
 <string name="announce_enabled">Announce incoming caller</string>
-<string name="announce_limit">Plays an offline voice on the visible incoming call screen. Respects silent mode and Do Not Disturb.</string>
-<string name="default_note">Set AureDial as default to see call history and handle calls.</string>
+<string name="announce_limit">Announces the caller while the phone rings, even when another app is open. Uses an installed offline voice and respects silent mode and Do Not Disturb.</string>
+<string name="default_note">Choose AureDial as your default phone app to receive calls here.</string>
 <string name="set_default">Set default phone app</string>
-<string name="beta_notice">Engineering beta: use a spare phone only. Incoming notifications, audio and emergency behavior have not been validated on hardware. Restore your original phone app after testing.</string>
 <string name="permissions">Grant permissions</string>
 <string name="notifications">Enable notifications</string>
 <string name="fullscreen">Full-screen call settings</string>
@@ -71,4 +70,17 @@
 <string name="rejected_call">Declined call</string>
 <string name="blocked_call">Blocked call</string>
 <string name="close_details">Close</string>
+<string name="receive_calls_title">Incoming call setup</string>
+<string name="call_alerts_needed">Allow call notifications to get Answer and Decline controls when another app is open.</string>
+<string name="call_channel_needed">Enable incoming call alerts and pop-up notifications in Android.</string>
+<string name="call_full_screen_needed">Allow full-screen call alerts to show the answer screen on the lock screen.</string>
+<string name="call_setup_ready">Phone role and call alerts are enabled.</string>
+<string name="incoming_call_settings">Incoming call alerts</string>
+<string name="call_identity_permissions">Allow contacts and SIM details</string>
+<string name="open_call">Back to call</string>
+<string name="from_contacts">From contacts</string>
+<string name="other_call">Other call · %1$s</string>
+<string name="all_contacts">All contacts</string>
+<string name="install_voice">Install offline voice</string>
+<string name="open_tts_manually">Open Android text-to-speech settings and install a voice for your language.</string>
 </resources>

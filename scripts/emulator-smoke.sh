@@ -5,7 +5,8 @@ apk=${1:-app/build/outputs/apk/debug/app-debug.apk}
 package=dev.auredial.app
 number=2025550123
 output=$(mktemp -d)
-trap 'adb emu gsm cancel "$number" >/dev/null 2>&1 || true; rm -rf "$output"' EXIT
+fixture=scripts/fixtures/tts
+trap 'adb emu gsm cancel "$number" >/dev/null 2>&1 || true; adb shell settings delete secure tts_default_synth >/dev/null 2>&1 || true; rm -rf "$output"' EXIT
 
 retry() {
     local timeout_seconds=$1 deadline=$((SECONDS + $1))
@@ -13,6 +14,7 @@ retry() {
     until "$@"; do
         if (( SECONDS >= deadline )); then
             printf 'Timed out after %ss waiting for %s\n' "$timeout_seconds" "$1" >&2
+            adb shell dumpsys activity activities | sed -n '/ResumedActivity/p' >&2 || true
             return 1
         fi
         sleep 2
@@ -28,20 +30,73 @@ dump_ui() {
         adb exec-out cat /data/local/tmp/auredial-smoke.xml > "$output/ui.xml"
 }
 
-has_number_in_keypad() {
-    dump_ui && python3 - "$output/ui.xml" "$number" <<'PY'
+ui_node() {
+    local label=$1 click=${2:-false} coords
+    dump_ui || return 1
+    coords=$(python3 - "$output/ui.xml" "$label" "$click" <<'PY'
+import re
 import sys
 import xml.etree.ElementTree as ET
 
-nodes = ET.parse(sys.argv[1]).iter("node")
-assert any(node.get("package") == "dev.auredial.app"
-           and node.get("text") == "+1" + sys.argv[2] for node in nodes)
+for node in ET.parse(sys.argv[1]).iter("node"):
+    if node.get("package") != "dev.auredial.app":
+        continue
+    if sys.argv[2] not in (node.get("text"), node.get("content-desc")):
+        continue
+    if sys.argv[3] == "true" and node.get("clickable") != "true":
+        continue
+    x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
+    print((x1 + x2) // 2, (y1 + y2) // 2)
+    sys.exit(0)
+sys.exit(1)
 PY
+    ) || return 1
+    if [[ $click == true ]]; then
+        local x y
+        read -r x y <<< "$coords"
+        adb shell input tap "$x" "$y"
+    fi
+}
+
+call_activity_resumed() {
+    adb shell dumpsys activity activities > "$output/activity.txt" &&
+        grep -Eq 'ResumedActivity[:=].*dev\.auredial\.app/\.CallActivity' "$output/activity.txt"
+}
+
+active_call() {
+    adb shell dumpsys telecom > "$output/telecom.txt" &&
+        grep -Eq '\[TC@[^,]*, ACTIVE,.*tel:' "$output/telecom.txt"
+}
+
+call_ended() {
+    local calls
+    calls=$(adb emu gsm list) && [[ $calls != *"$number"* ]]
 }
 
 notification_present() {
     adb shell dumpsys notification > "$output/notifications.txt" &&
         grep -Eq 'NotificationRecord\(.*pkg=dev\.auredial\.app .*id=72 .*channel=incoming_v2' "$output/notifications.txt"
+}
+
+voice_called() {
+    adb logcat -d -s 'AureDialTestVoice:I' > "$output/voice.txt" &&
+        grep -Fq 'Incoming number reached offline voice' "$output/voice.txt"
+}
+
+install_voice_fixture() {
+    local android_jar="$ANDROID_HOME/platforms/android-36/android.jar"
+    local tools="$ANDROID_HOME/build-tools/35.0.0"
+    mkdir -p "$output/classes" "$output/dex"
+    javac --release 8 -classpath "$android_jar" -d "$output/classes" "$fixture/SmokeVoiceService.java"
+    "$tools/d8" --min-api 29 --lib "$android_jar" --output "$output/dex" \
+        "$output/classes/dev/auredial/testvoice/SmokeVoiceService.class"
+    "$tools/aapt2" link -I "$android_jar" --manifest "$fixture/AndroidManifest.xml" \
+        --min-sdk-version 29 --target-sdk-version 35 -o "$output/unsigned.apk"
+    zip -q -j "$output/unsigned.apk" "$output/dex/classes.dex"
+    "$tools/apksigner" sign --ks "$HOME/.android/debug.keystore" --ks-pass pass:android \
+        --out "$output/test-voice.apk" "$output/unsigned.apk"
+    adb install -r "$output/test-voice.apk"
+    adb shell settings put secure tts_default_synth dev.auredial.testvoice
 }
 
 timeout 240 adb wait-for-device
@@ -54,16 +109,50 @@ adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
 
 adb shell am start -W -a android.intent.action.DIAL -d "tel:+1$number" -n "$package/.MainActivity"
-retry 45 has_number_in_keypad
+retry 45 ui_node "+1$number"
 echo "PASS: ACTION_DIAL pre-fills the keypad"
 
 adb shell cmd role add-role-holder --user 0 android.app.role.DIALER "$package"
 adb shell pm grant "$package" android.permission.POST_NOTIFICATIONS
-adb emu gsm call "$number"
-retry 45 notification_present
-echo "PASS: incoming Telecom call posts AureDial's call notification"
+install_voice_fixture
 
+adb shell input keyevent KEYCODE_HOME
+adb shell cmd appops set "$package" USE_FULL_SCREEN_INTENT deny
+adb emu gsm call "$number"
+retry 30 notification_present
+retry 30 voice_called
+if call_activity_resumed; then
+    echo "Expected voice while the full-screen call activity was closed" >&2
+    exit 1
+fi
+echo "PASS: call notification and offline voice with the call activity closed"
 adb emu gsm cancel "$number"
+retry 30 call_ended
+
+adb shell cmd appops set "$package" USE_FULL_SCREEN_INTENT allow
+adb shell input keyevent KEYCODE_SLEEP
+sleep 1
+adb emu gsm call "$number"
+retry 30 call_activity_resumed
+retry 30 ui_node "Decline"
+if [[ -n ${AURE_TEST_SCREENSHOT:-} ]]; then
+    adb exec-out screencap -p > "$AURE_TEST_SCREENSHOT"
+fi
+retry 30 ui_node "Decline" true
+retry 30 call_ended
+echo "PASS: a locked screen opens AureDial and Decline rejects the incoming call"
+
+adb shell input keyevent KEYCODE_WAKEUP
+adb shell wm dismiss-keyguard
+adb shell am start -W -n "$package/.MainActivity"
+adb emu gsm call "$number"
+retry 30 call_activity_resumed
+retry 30 ui_node "Answer" true
+retry 30 active_call
+retry 30 ui_node "End call" true
+retry 30 call_ended
+echo "PASS: Answer connects the call and End call disconnects it"
+
 adb shell logcat -d -b crash > "$output/crashes.txt"
 if grep -Fq "Process: $package," "$output/crashes.txt"; then
     cat "$output/crashes.txt"
