@@ -1,6 +1,7 @@
 package dev.auredial.app
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.app.NotificationManager
 import android.app.role.RoleManager
 import android.os.Build
@@ -69,7 +70,7 @@ class MainActivity : ComponentActivity() {
     private fun place(number:String):Boolean=runCatching {
         if(!isDialer()) startActivity(Intent(Intent.ACTION_DIAL,Uri.fromParts("tel",number,null)))
         else {
-            if(!hasPermission(Manifest.permission.CALL_PHONE)) {permissions.launch(arrayOf(Manifest.permission.CALL_PHONE));return false}
+            if(checkSelfPermission(Manifest.permission.CALL_PHONE)!=PackageManager.PERMISSION_GRANTED) {permissions.launch(arrayOf(Manifest.permission.CALL_PHONE));return false}
             getSystemService(TelecomManager::class.java).placeCall(Uri.fromParts("tel",number,null),Bundle())
         }
         true

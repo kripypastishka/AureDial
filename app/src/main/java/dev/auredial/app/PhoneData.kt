@@ -14,7 +14,7 @@ internal fun Context.hasPermission(permission:String)=checkSelfPermission(permis
 internal fun Context.isDialer()=getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_DIALER)==true
 internal fun readPeople(context:Context,history:Boolean):List<PhoneRow> {
     if(history) {
-        if(!context.isDialer() || !context.hasPermission(Manifest.permission.READ_CALL_LOG)) return emptyList()
+        if(!context.isDialer() || context.checkSelfPermission(Manifest.permission.READ_CALL_LOG)!=PackageManager.PERMISSION_GRANTED) return emptyList()
         return context.contentResolver.query(CallLog.Calls.CONTENT_URI,arrayOf(CallLog.Calls._ID,CallLog.Calls.CACHED_NAME,CallLog.Calls.NUMBER,CallLog.Calls.DATE,CallLog.Calls.TYPE,CallLog.Calls.NUMBER_PRESENTATION),null,null,CallLog.Calls.DATE+" DESC")?.use { cursor ->
             buildList {
                 while(size<250 && cursor.moveToNext()) {
@@ -33,7 +33,7 @@ internal fun readPeople(context:Context,history:Boolean):List<PhoneRow> {
             }
         }.orEmpty()
     }
-    if(!context.hasPermission(Manifest.permission.READ_CONTACTS)) return emptyList()
+    if(context.checkSelfPermission(Manifest.permission.READ_CONTACTS)!=PackageManager.PERMISSION_GRANTED) return emptyList()
     return context.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
         arrayOf(ContactsContract.CommonDataKinds.Phone._ID,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,ContactsContract.CommonDataKinds.Phone.NUMBER,ContactsContract.Contacts.STARRED),
         null,null,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" COLLATE LOCALIZED ASC")?.use { cursor ->
@@ -46,6 +46,7 @@ internal fun readPeople(context:Context,history:Boolean):List<PhoneRow> {
     }.orEmpty()
 }
 internal fun accounts(context:Context):List<Pair<PhoneAccountHandle,String>> = runCatching {
+    if(context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE)!=PackageManager.PERMISSION_GRANTED) return emptyList()
     val telecom=context.getSystemService(TelecomManager::class.java)
     telecom.callCapablePhoneAccounts.mapIndexed { i,handle -> handle to (telecom.getPhoneAccount(handle)?.label?.toString() ?: context.getString(R.string.sim_number,i+1)) }
 }.getOrDefault(emptyList())

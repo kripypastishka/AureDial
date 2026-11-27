@@ -3,7 +3,6 @@ package dev.auredial.app
 import android.content.Intent
 import android.os.Bundle
 import android.telecom.Call
-import android.telecom.TelecomManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -34,8 +33,7 @@ class CallActivity: ComponentActivity() {
                 Surface(Modifier.fillMaxSize()) {
                     val call=ui.calls.firstOrNull { it.state==Call.STATE_RINGING } ?: ui.calls.firstOrNull { it.state==Call.STATE_ACTIVE } ?: ui.calls.firstOrNull()
                     if(call!=null) CallScreen(call,ui,showKeypad.value,{showKeypad.value=!showKeypad.value},accounts(this),
-                        onAdd={startActivity(Intent(this,MainActivity::class.java).putExtra("open_dial",true))},
-                        onSilence={getSystemService(TelecomManager::class.java).silenceRinger()})
+                        onAdd={startActivity(Intent(this,MainActivity::class.java).putExtra("open_dial",true))})
                 }
             }
         }
@@ -46,7 +44,7 @@ class CallActivity: ComponentActivity() {
 }
 
 @Composable private fun CallScreen(call:CallView,ui:CallUi,keypad:Boolean,toggleKeypad:()->Unit,
-                                    accounts:List<Pair<android.telecom.PhoneAccountHandle,String>>,onAdd:()->Unit,onSilence:()->Unit) {
+                                    accounts:List<Pair<android.telecom.PhoneAccountHandle,String>>,onAdd:()->Unit) {
     val ringing=call.state==Call.STATE_RINGING
     val active=call.state==Call.STATE_ACTIVE
     val holding=call.state==Call.STATE_HOLDING
@@ -77,7 +75,6 @@ class CallActivity: ComponentActivity() {
             accounts.forEach { (account,label)->Button(onClick={CallRuntime.selectAccount(call.id,account)},modifier=Modifier.fillMaxWidth()){Text(label)} }
         }
         if(ringing) {
-            TextButton(onClick=onSilence){Text(stringResource(R.string.silence))}
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)){
                 Button(onClick={CallRuntime.action(call.id,"reject")},modifier=Modifier.weight(1f).heightIn(min=64.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFFB42335),contentColor=Color.White)){Text(stringResource(R.string.reject))}
                 Button(onClick={CallRuntime.action(call.id,"answer")},modifier=Modifier.weight(1f).heightIn(min=64.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFF18794E),contentColor=Color.White)){Text(stringResource(R.string.answer))}

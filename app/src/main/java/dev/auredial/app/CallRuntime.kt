@@ -1,5 +1,7 @@
 package dev.auredial.app
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -159,6 +161,7 @@ class AureInCallService : InCallService() {
         if(e==null) { manager.cancel(72); notificationKey=null; return }
         val v=view(e); val incoming=v.state==Call.STATE_RINGING
         val key=v.id+":"+incoming+":"+v.state
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         if(notificationKey==key) return
         val newIncoming=incoming && notificationKey?.startsWith(v.id+":")!=true
         notificationKey=key
@@ -179,7 +182,9 @@ class AureInCallService : InCallService() {
             builder.addAction(Notification.Action.Builder(null,getString(if(incoming) R.string.reject else R.string.end_call),pending(v.id,if(incoming) "reject" else "end")).build())
         }
         if(newIncoming && (Build.VERSION.SDK_INT<34 || manager.canUseFullScreenIntent())) builder.setFullScreenIntent(open,true)
-        runCatching { manager.notify(72,builder.build()) }
+        if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            runCatching { manager.notify(72,builder.build()) }
+        }
     }
 
     internal fun visible(value:Boolean) {
