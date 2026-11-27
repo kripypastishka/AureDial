@@ -38,9 +38,10 @@ jobs:
           AURE_IMAGE: system-images;android-35;google_apis;x86_64
         run: |
           sudo chown "$USER" /dev/kvm
-          sdkmanager emulator "$AURE_IMAGE"
+          sdkmanager --sdk_root="$ANDROID_HOME" emulator "$AURE_IMAGE"
           printf 'no\n' | avdmanager create avd --name smoke --package "$AURE_IMAGE" --device pixel_6
-          emulator -avd smoke -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -accel on > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          adb start-server
+          "$ANDROID_HOME/emulator/emulator" -avd smoke -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -accel on > "$RUNNER_TEMP/emulator.log" 2>&1 &
           emulator_pid=$!
           trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
           if ! bash scripts/emulator-smoke.sh; then
