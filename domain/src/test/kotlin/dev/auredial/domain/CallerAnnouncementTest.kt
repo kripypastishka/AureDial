@@ -8,38 +8,37 @@ class CallerAnnouncementTest {
     @Test
     fun waitsForIdentityAndEngineBeforeSpeakingOnce() {
         val session = AnnouncementSession()
-        assertEquals(AnnouncementAction.WAIT, session.update("call", true, true, true, 0))
-        assertEquals(AnnouncementAction.WAIT, session.update("call", true, true, false, 400))
-        assertEquals(AnnouncementAction.SPEAK, session.update("call", true, true, true, 500))
-        assertEquals(AnnouncementAction.KEEP, session.update("call", true, true, true, 700))
-        assertEquals(AnnouncementAction.STOP, session.update("call", true, false, true, 900))
-        assertEquals(AnnouncementAction.KEEP, session.update("call", true, true, true, 1_000))
+        assertEquals(AnnouncementAction.WAIT, session.update("call", true, true, 0))
+        assertEquals(AnnouncementAction.WAIT, session.update("call", true, false, 400))
+        assertEquals(AnnouncementAction.SPEAK, session.update("call", true, true, 500))
+        assertEquals(AnnouncementAction.KEEP, session.update("call", true, true, 700))
+        assertEquals(AnnouncementAction.KEEP, session.update("call", true, true, 1_000))
     }
 
     @Test
     fun stopsImmediatelyWhenAnsweredAndAllowsNextCall() {
         val session = AnnouncementSession()
-        session.update("first", true, true, true, 0)
-        session.update("first", true, true, true, 400)
+        session.update("first", true, true, 0)
+        session.update("first", true, true, 400)
         session.suppress("first")
-        assertEquals(AnnouncementAction.STOP, session.update("first", true, true, true, 401))
-        assertEquals(AnnouncementAction.STOP, session.update(null, false, true, true, 402))
-        assertEquals(AnnouncementAction.WAIT, session.update("second", true, true, true, 500))
-        assertEquals(AnnouncementAction.SPEAK, session.update("second", true, true, true, 900))
+        assertEquals(AnnouncementAction.STOP, session.update("first", true, true, 401))
+        assertEquals(AnnouncementAction.STOP, session.update(null, false, true, 402))
+        assertEquals(AnnouncementAction.WAIT, session.update("second", true, true, 500))
+        assertEquals(AnnouncementAction.SPEAK, session.update("second", true, true, 900))
     }
 
     @Test
     fun suppressionPersistsAfterAnotherCallOrSilentRinging() {
         val session = AnnouncementSession()
-        assertEquals(AnnouncementAction.STOP, session.update("call", false, true, true, 0))
-        assertEquals(AnnouncementAction.STOP, session.update("call", true, true, true, 500))
+        assertEquals(AnnouncementAction.STOP, session.update("call", false, true, 0))
+        assertEquals(AnnouncementAction.STOP, session.update("call", true, true, 500))
     }
 
     @Test
-    fun screenOpenedTooLateDoesNotTriggerAnnouncement() {
+    fun engineThatBecomesReadyTooLateDoesNotTriggerAnnouncement() {
         val session = AnnouncementSession()
-        assertEquals(AnnouncementAction.STOP, session.update("call", true, false, true, 0))
-        assertEquals(AnnouncementAction.STOP, session.update("call", true, true, true, 6_000))
+        assertEquals(AnnouncementAction.WAIT, session.update("call", true, false, 0))
+        assertEquals(AnnouncementAction.STOP, session.update("call", true, true, 9_000))
     }
 
     @Test

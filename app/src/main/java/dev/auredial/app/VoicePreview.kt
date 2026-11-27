@@ -18,12 +18,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** Main-thread-only offline speech used by the settings preview and the in-call service. */
-class VoicePreview(private val context: Context) {
+class VoicePreview(private val context: Context, private val incomingCall: Boolean = false) {
     private val main = Handler(Looper.getMainLooper())
     private val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val notifications = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    private val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
-        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
+    private val attributes = AudioAttributes.Builder()
+        .setUsage(if (incomingCall) AudioAttributes.USAGE_NOTIFICATION_RINGTONE else AudioAttributes.USAGE_MEDIA)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
     private val status = MutableStateFlow(R.string.voice_loading)
     val state = status.asStateFlow()
     val isReady: Boolean get() = ready && !closed
@@ -94,9 +96,18 @@ class VoicePreview(private val context: Context) {
         observingAudio = true
     }.isSuccess
 
-    fun play() { playText(context.getString(R.string.preview_text), false) }
-    fun playAnnouncement(text:String):Boolean = playText(text,true)
-    private fun playText(text:String, ringing:Boolean):Boolean {
+    fun play() { playText(context.getString(R.string.preview_text)) }
+
+    fun openVoiceInstaller(): Boolean = runCatching {
+        val intent = Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA).apply {
+            engine?.defaultEngine?.let(::setPackage)
+        }
+        context.startActivity(intent)
+    }.isSuccess
+
+    fun playAnnouncement(text: String): Boolean = playText(text)
+
+    private fun playText(text: String): Boolean {
         if (closed || !ready) return false
         if (utterance != null) finish(R.string.voice_ready)
         if (!systemAllowsSpeech()) {
@@ -104,22 +115,26 @@ class VoicePreview(private val context: Context) {
             return false
         }
         val mode = audio.mode
-        if (mode != AudioManager.MODE_NORMAL && !(ringing && mode == AudioManager.MODE_RINGTONE)) {
+        if (mode != AudioManager.MODE_NORMAL && !(incomingCall && mode == AudioManager.MODE_RINGTONE)) {
             status.value = R.string.voice_interrupted
             return false
         }
         val id = UUID.randomUUID().toString()
-        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-            .setAudioAttributes(attributes).setAcceptsDelayedFocusGain(false)
-            .setOnAudioFocusChangeListener({ change ->
-                if (change < 0 && utterance == id) finish(R.string.voice_focus_denied)
-            }, main).build()
-        if (runCatching { audio.requestAudioFocus(request) }.getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
-            != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            status.value = R.string.voice_focus_denied
-            return false
+        // Incoming speech is a brief call alert on the ringtone stream.
+        // Telecom retains its ring audio focus. The settings preview uses media focus.
+        if (!incomingCall) {
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                .setAudioAttributes(attributes).setAcceptsDelayedFocusGain(false)
+                .setOnAudioFocusChangeListener({ change ->
+                    if (change < 0 && utterance == id) finish(R.string.voice_focus_denied)
+                }, main).build()
+            if (runCatching { audio.requestAudioFocus(request) }.getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
+                != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                status.value = R.string.voice_focus_denied
+                return false
+            }
+            focus = request
         }
-        focus = request
         if (!observeAudio() || !systemAllowsSpeech()) {
             finish(R.string.voice_interrupted)
             return false
@@ -164,7 +179,7 @@ internal fun voicePreferences(context: Context) = context.getSharedPreferences("
 
 internal fun readVoiceSettings(context: Context): VoiceSettings = voicePreferences(context).let {
     VoiceSettings(
-        enabled = it.getBoolean("announce", false),
+        enabled = it.getBoolean("announce", true),
         contactsOnly = it.getBoolean("contacts_only", false),
         rate = it.getInt("rate", 100).coerceIn(75, 125),
     )

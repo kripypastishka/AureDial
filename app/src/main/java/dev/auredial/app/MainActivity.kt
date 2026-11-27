@@ -6,6 +6,8 @@ import android.provider.CallLog
 import android.provider.ContactsContract
 import androidx.compose.foundation.horizontalScroll
 import android.app.NotificationManager
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import android.app.role.RoleManager
 import android.os.Build
 import android.provider.Settings
@@ -37,6 +39,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -48,6 +51,7 @@ import dev.auredial.domain.t9Matches
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 
 @Composable internal fun AureTheme(content:@Composable ()->Unit) {
@@ -70,16 +74,61 @@ class MainActivity : ComponentActivity() {
     private val externalNumber=mutableStateOf<String?>(null)
     private val roleRequest=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){refresh()}
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh() }
-    private val setupNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        refresh()
-        if (granted) requestRole(RoleManager.ROLE_DIALER)
-    }
-    private fun refresh(){
-        val manager=getSystemService(RoleManager::class.java)
-        screening.value=manager?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)==true
-        dialer.value=isDialer()
+    private val setupNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
+    private var callSetup by mutableStateOf(CallSetup.DEFAULT_APP)
+    private var lastPresentedCall: String? = null
+
+    private fun refresh() {
+        val roles = getSystemService(RoleManager::class.java)
+        screening.value = roles?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) == true
+        dialer.value = isDialer()
+        val notifications = getSystemService(NotificationManager::class.java)
+        val importance = notifications.getNotificationChannel(INCOMING_CALL_CHANNEL)?.importance
+        callSetup = when {
+            !dialer.value -> CallSetup.DEFAULT_APP
+            !notifications.areNotificationsEnabled() -> CallSetup.NOTIFICATIONS
+            importance != null && importance < NotificationManager.IMPORTANCE_HIGH -> CallSetup.CHANNEL
+            !canShowCallFullScreen(this) -> CallSetup.FULL_SCREEN
+            else -> CallSetup.READY
+        }
         revision.intValue++
     }
+
+    private fun openSetting(action: String, configure: Intent.() -> Unit = {}) {
+        val destination = Intent(action).apply(configure)
+        if (runCatching { startActivity(destination) }.isFailure) {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, ("package:" + packageName).toUri()))
+        }
+    }
+
+    private fun configureCalls(step: CallSetup) {
+        when (step) {
+            CallSetup.DEFAULT_APP -> requestRole(RoleManager.ROLE_DIALER)
+            CallSetup.NOTIFICATIONS -> {
+                val prefs = getPreferences(MODE_PRIVATE)
+                if (Build.VERSION.SDK_INT >= 33 && !hasPermission(Manifest.permission.POST_NOTIFICATIONS) &&
+                    (!prefs.getBoolean("asked_notifications", false) ||
+                        shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS))
+                ) {
+                    prefs.edit { putBoolean("asked_notifications", true) }
+                    setupNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else openSetting(Settings.ACTION_APP_NOTIFICATION_SETTINGS) {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                }
+            }
+            CallSetup.CHANNEL -> openSetting(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS) {
+                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                putExtra(Settings.EXTRA_CHANNEL_ID, INCOMING_CALL_CHANNEL)
+            }
+            CallSetup.FULL_SCREEN -> if (Build.VERSION.SDK_INT >= 34) {
+                openSetting(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT) {
+                    data = ("package:" + packageName).toUri()
+                }
+            }
+            CallSetup.READY -> Unit
+        }
+    }
+
     private fun handleIntent(intent:Intent) {
         if (intent.action == Intent.ACTION_DIAL) {
             externalNumber.value = intent.data?.takeIf { it.scheme == "tel" }?.schemeSpecificPart?.take(64) ?: ""
@@ -112,7 +161,7 @@ class MainActivity : ComponentActivity() {
                 var tab by rememberSaveable {mutableIntStateOf(0)}
                 var keypad by rememberSaveable {mutableStateOf(false)}
                 var initial by rememberSaveable {mutableStateOf("")}
-                var warning by rememberSaveable {mutableStateOf(false)}
+                var favoritesOnly by rememberSaveable { mutableStateOf(false) }
                 var keypadSession by rememberSaveable { mutableIntStateOf(0) }
                 var details by remember { mutableStateOf<PhoneRow?>(null) }
                 fun openKeypad(number: String) {
@@ -124,48 +173,106 @@ class MainActivity : ComponentActivity() {
                 val snackbar=remember{SnackbarHostState()};val scope=rememberCoroutineScope()
                 fun error(id:Int){scope.launch{snackbar.showSnackbar(getString(id))}}
                 LaunchedEffect(externalNumber.value) {externalNumber.value?.let { openKeypad(it); externalNumber.value = null }}
-                LaunchedEffect(callUi.calls.firstOrNull{it.state==Call.STATE_DIALING||it.state==Call.STATE_CONNECTING||it.state==Call.STATE_SELECT_PHONE_ACCOUNT}?.id){
-                    if(callUi.calls.any{it.state==Call.STATE_DIALING||it.state==Call.STATE_CONNECTING||it.state==Call.STATE_SELECT_PHONE_ACCOUNT})
-                        startActivity(Intent(this@MainActivity,CallActivity::class.java))
-                }
-                Scaffold(snackbarHost={SnackbarHost(snackbar)},floatingActionButton={
-                    if (tab < 3 && !keypad) ExtendedFloatingActionButton(onClick = { openKeypad("") }){Text(stringResource(R.string.dial))}
-                },bottomBar={
-                    NavigationBar {
-                        listOf(R.string.recents,R.string.contacts,R.string.favorites,R.string.protect,R.string.settings).forEachIndexed{index,label->
-                            NavigationBarItem(selected=tab==index,onClick={stopPreview();tab=index;keypad=false},icon={Text(listOf("◷","●","★","◈","⚙")[index],style=MaterialTheme.typography.titleLarge)},label={Text(stringResource(label),maxLines=1,overflow=TextOverflow.Ellipsis)})
+                LaunchedEffect(Unit) {
+                    lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                        CallRuntime.state.collect { state ->
+                            val incoming = state.calls.firstOrNull { isIncomingRinging(it.state) }
+                            val outgoing = state.calls.firstOrNull {
+                                it.state == Call.STATE_DIALING || it.state == Call.STATE_CONNECTING ||
+                                    it.state == Call.STATE_SELECT_PHONE_ACCOUNT
+                            }
+                            val call = incoming ?: outgoing
+                            if (call != null && lastPresentedCall != call.id) {
+                                lastPresentedCall = call.id
+                                startActivity(callScreenIntent(this@MainActivity))
+                            } else if (state.calls.isEmpty()) {
+                                lastPresentedCall = null
+                            }
                         }
                     }
-                }) {padding->
-                    Column(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize().padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-                        Row(Modifier.fillMaxWidth().padding(top=12.dp),verticalAlignment=Alignment.CenterVertically){
-                            Text(stringResource(R.string.app_name), style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary,modifier=Modifier.weight(1f))
-                            if(callUi.calls.isNotEmpty()) TextButton(onClick={startActivity(Intent(this@MainActivity,CallActivity::class.java))}){Text(stringResource(R.string.ongoing_call))}
+                }
+                Scaffold(
+                    snackbarHost = { SnackbarHost(snackbar) },
+                    floatingActionButton = {
+                        if (tab < 2 && !keypad) {
+                            ExtendedFloatingActionButton(
+                                onClick = { openKeypad("") },
+                                icon = { Icon(painterResource(R.drawable.aure_answer), null) },
+                                text = { Text(stringResource(R.string.dial)) },
+                            )
                         }
-                        if(!dialer.value && !keypad) ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp)){
-                            Text(stringResource(R.string.default_note))
-                            TextButton(onClick={warning=true}){Text(stringResource(R.string.set_default))}
-                        }}
+                    },
+                    bottomBar = {
+                        if (!keypad) {
+                            NavigationBar {
+                                val destinations = listOf(
+                                    R.string.recents to R.drawable.aure_recent,
+                                    R.string.contacts to R.drawable.aure_contacts,
+                                    R.string.protect to R.drawable.aure_shield,
+                                    R.string.settings to R.drawable.aure_settings,
+                                )
+                                destinations.forEachIndexed { index, (label, icon) ->
+                                    NavigationBarItem(
+                                        selected = tab == index,
+                                        onClick = { stopPreview(); tab = index },
+                                        icon = { Icon(painterResource(icon), null) },
+                                        label = { Text(stringResource(label), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    )
+                                }
+                            }
+                        }
+                    },
+                ) { padding ->
+                    Column(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize().padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+                        val title = if (keypad) R.string.dial else when (tab) {
+                            0 -> R.string.recents
+                            1 -> R.string.contacts
+                            2 -> R.string.protect
+                            else -> R.string.settings
+                        }
+                        Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+                            if (callUi.calls.isNotEmpty()) {
+                                TextButton(onClick = { startActivity(callScreenIntent(this@MainActivity)) }) {
+                                    Text(stringResource(R.string.open_call))
+                                }
+                            }
+                        }
+                        if (tab == 0 && !keypad && callSetup != CallSetup.READY) {
+                            CallSetupCard(callSetup, ::configureCalls)
+                        }
                         if(keypad) Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)){
                             TextButton(onClick={keypad=false}){Text(stringResource(R.string.close_keypad))}
                             key(keypadSession) {
                                 DialPage(initial, dialer.value) { if (place(it)) keypad = false else error(R.string.action_failed) }
                             }
-                        } else when(tab){
-                            0,1,2 -> PeoplePage(tab,revision.intValue,dialer.value,
-                                request={permissions.launch(if(tab==0)arrayOf(Manifest.permission.READ_CALL_LOG) else arrayOf(Manifest.permission.READ_CONTACTS))},
-                                onDetails = { details = it })
-                            3 -> Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)){
-                                ProtectionPage(store,screening.value,{requestRole(RoleManager.ROLE_CALL_SCREENING)},{error(it)})
+                        } else when (tab) {
+                            0, 1 -> {
+                                if (tab == 1) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        FilterChip(selected = !favoritesOnly, onClick = { favoritesOnly = false },
+                                            label = { Text(stringResource(R.string.all_contacts)) })
+                                        FilterChip(selected = favoritesOnly, onClick = { favoritesOnly = true },
+                                            label = { Text(stringResource(R.string.favorites)) })
+                                    }
+                                }
+                                val people = if (tab == 1 && favoritesOnly) 2 else tab
+                                PeoplePage(people, revision.intValue, dialer.value,
+                                    request = { permissions.launch(if (tab == 0) arrayOf(Manifest.permission.READ_CALL_LOG)
+                                        else arrayOf(Manifest.permission.READ_CONTACTS)) },
+                                    onDetails = { details = it })
                             }
-                            else -> Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)){
-                                Text(stringResource(R.string.settings),style=MaterialTheme.typography.headlineSmall)
-                                Text(stringResource(R.string.beta_notice),style=MaterialTheme.typography.bodySmall)
-                                TextButton(onClick={warning=true}){Text(stringResource(R.string.set_default))}
-                                TextButton(onClick={permissions.launch(arrayOf(Manifest.permission.READ_CONTACTS,Manifest.permission.READ_PHONE_STATE))}){Text(stringResource(R.string.permissions))}
-                                if(Build.VERSION.SDK_INT>=33) TextButton(onClick={permissions.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))}){Text(stringResource(R.string.notifications))}
-                                if(Build.VERSION.SDK_INT>=34) TextButton(onClick={runCatching{startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,("package:" + packageName).toUri()))}}){Text(stringResource(R.string.fullscreen))}
-                                VoicePage(voice)
+                            2 -> Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                ProtectionPage(store, screening.value, { requestRole(RoleManager.ROLE_CALL_SCREENING) }, ::error)
+                            }
+                            else -> Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                CallSetupCard(callSetup, ::configureCalls)
+                                TextButton(onClick = { permissions.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.READ_PHONE_STATE)) }) {
+                                    Text(stringResource(R.string.call_identity_permissions))
+                                }
+                                VoicePage(voice, onError = ::error)
                             }
                         }
                     }
@@ -176,13 +283,7 @@ class MainActivity : ComponentActivity() {
                         onDial = { details = null; openKeypad(row.number) },
                     )
                 }
-                if(warning) AlertDialog(onDismissRequest={warning=false},title={Text(stringResource(R.string.set_default))},text={Text(stringResource(R.string.beta_notice))},
-                    confirmButton={TextButton(onClick={
-                        warning=false
-                        if (Build.VERSION.SDK_INT >= 33 && !hasPermission(Manifest.permission.POST_NOTIFICATIONS))
-                            setupNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        else requestRole(RoleManager.ROLE_DIALER)
-                    }){Text(stringResource(R.string.continue_action))}},dismissButton={TextButton(onClick={warning=false}){Text(stringResource(R.string.cancel_action))}})
+
             }
         }
     }
@@ -205,8 +306,13 @@ class MainActivity : ComponentActivity() {
         if(permitted){val result=withContext(Dispatchers.IO){runCatching{readPeople(context,history)}}
             rows=result.getOrNull();failed=result.isFailure}
     }
-    Text(stringResource(listOf(R.string.recents,R.string.contacts,R.string.favorites)[tab]),style=MaterialTheme.typography.headlineSmall)
-    if(!permitted){Text(stringResource(if(history&&!dialer)R.string.default_note else R.string.permission_note));if(!history||dialer) Button(onClick=request){Text(stringResource(R.string.permissions))};return}
+    if (!permitted) {
+        if (!history || dialer) {
+            Text(stringResource(R.string.permission_note))
+            OutlinedButton(onClick = request) { Text(stringResource(R.string.permissions)) }
+        }
+        return
+    }
     OutlinedTextField(value=query,onValueChange={query=it},label={Text(stringResource(R.string.search))},singleLine=true,modifier=Modifier.fillMaxWidth())
     if (history) {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -444,7 +550,7 @@ private fun NumberDetails(row: PhoneRow, store: RuleStore, onDismiss: () -> Unit
 }
 
 @Composable
-private fun VoicePage(voice: VoicePreview) {
+private fun VoicePage(voice: VoicePreview, onError: (Int) -> Unit) {
     val context = LocalContext.current
     val preferences = remember(context) { voicePreferences(context) }
     var settings by remember(context) { mutableStateOf(readVoiceSettings(context)) }
@@ -470,6 +576,12 @@ private fun VoicePage(voice: VoicePreview) {
                     settings = settings.copy(rate = chosen)
                 })
             Text(stringResource(status), style = MaterialTheme.typography.bodyMedium)
+            if (status == R.string.voice_unavailable) {
+                OutlinedButton(onClick = { if (!voice.openVoiceInstaller()) onError(R.string.open_tts_manually) }) {
+                    Text(stringResource(R.string.install_voice))
+                }
+            }
+
             if (status == R.string.voice_playing) {
                 OutlinedButton(onClick = voice::stop, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.stop)) }
             } else {
