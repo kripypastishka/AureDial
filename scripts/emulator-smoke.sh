@@ -50,23 +50,28 @@ dump_ui() {
 ui_node() {
     local label=$1 click=${2:-false} coords
     dump_ui || return 1
-    coords=$(python3 - "$output/ui.xml" "$label" "$click" <<'PY'
+    coords=$(python3 - "$output/ui.xml" "$label" <<'PYTHON'
 import re
 import sys
 import xml.etree.ElementTree as ET
 
-for node in ET.parse(sys.argv[1]).iter("node"):
-    if node.get("package") != "dev.auredial.app":
-        continue
-    if sys.argv[2] not in (node.get("text"), node.get("content-desc")):
-        continue
-    if sys.argv[3] == "true" and node.get("clickable") != "true":
-        continue
+try:
+    root = ET.parse(sys.argv[1])
+except ET.ParseError:
+    sys.exit(1)
+
+matching = [
+    node for node in root.iter("node")
+    if node.get("package") == "dev.auredial.app"
+    and sys.argv[2] in (node.get("text"), node.get("content-desc"))
+]
+for node in sorted(matching, key=lambda node: node.get("clickable") != "true"):
     x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
-    print((x1 + x2) // 2, (y1 + y2) // 2)
-    sys.exit(0)
+    if x1 < x2 and y1 < y2:
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        sys.exit(0)
 sys.exit(1)
-PY
+PYTHON
     ) || return 1
     if [[ $click == true ]]; then
         local x y
