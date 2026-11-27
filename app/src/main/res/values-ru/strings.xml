@@ -48,7 +48,6 @@
 <string name="search">Поиск</string>
 <string name="close_keypad">Закрыть клавиатуру</string>
 <string name="make_call">Позвонить</string>
-<string name="continue_action">Продолжить</string>
 <string name="cancel_action">Отмена</string>
 <string name="silence_failed">Отключать звук при сбое проверки номера</string>
 <string name="silence_failed_note">Только для номеров вне контактов, когда оператор сообщает о провале проверки. Нужен доступ к контактам.</string>

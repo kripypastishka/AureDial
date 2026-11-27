@@ -49,7 +49,6 @@
 <string name="search">Search</string>
 <string name="close_keypad">Close keypad</string>
 <string name="make_call">Call</string>
-<string name="continue_action">Continue</string>
 <string name="cancel_action">Cancel</string>
 <string name="silence_failed">Silence failed number verification</string>
 <string name="silence_failed_note">Only for numbers outside your contacts when the carrier explicitly reports a failed check. Requires Contacts access.</string>

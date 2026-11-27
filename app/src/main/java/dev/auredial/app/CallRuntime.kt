@@ -271,21 +271,20 @@ class AureInCallService : InCallService() {
         }
         // Keep the full-screen intent when contact lookup refreshes the same incoming call.
         if (incoming) builder.setFullScreenIntent(open, true)
-        val notification = builder.build()
+        if (postCallNotification(manager, builder.build())) {
+            notificationKey = key
+            if (incoming) ringingNotificationId = call.id
+        }
+    }
+
+    private fun postCallNotification(manager: NotificationManager, notification: Notification): Boolean {
         if (!foreground && isDialer()) {
             foreground = runCatching {
                 startForeground(CALL_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
             }.isSuccess
-            if (foreground) {
-                notificationKey = key
-                if (incoming) ringingNotificationId = call.id
-                return
-            }
+            if (foreground) return true
         }
-        if (runCatching { manager.notify(CALL_NOTIFICATION_ID, notification) }.isSuccess) {
-            notificationKey = key
-            if (incoming) ringingNotificationId = call.id
-        }
+        return runCatching { manager.notify(CALL_NOTIFICATION_ID, notification) }.isSuccess
     }
 
     private fun removeCallNotification() {
