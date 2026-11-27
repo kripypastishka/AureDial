@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.telecom.Call
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -13,7 +14,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.background
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -24,6 +28,7 @@ class CallActivity: ComponentActivity() {
     private val showKeypad=mutableStateOf(false)
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setShowWhenLocked(true); setTurnScreenOn(true)
         showKeypad.value=intent.getBooleanExtra("dialpad",false)
         setContent {
@@ -32,8 +37,8 @@ class CallActivity: ComponentActivity() {
                 LaunchedEffect(ui.calls.isEmpty()) { if(ui.calls.isEmpty()) { delay(350); if(CallRuntime.state.value.calls.isEmpty()) finish() } }
                 Surface(Modifier.fillMaxSize()) {
                     val call=ui.calls.firstOrNull { it.state==Call.STATE_RINGING } ?: ui.calls.firstOrNull { it.state==Call.STATE_ACTIVE } ?: ui.calls.firstOrNull()
-                    if(call!=null) CallScreen(call,ui,showKeypad.value,{showKeypad.value=!showKeypad.value},accounts(this),
-                        onAdd={startActivity(Intent(this,MainActivity::class.java).putExtra("open_dial",true))})
+                    if(call!=null) CallScreen(call,ui,showKeypad.value,{showKeypad.value=!showKeypad.value},call.accounts,
+                        onAdd={startActivity(Intent(Intent.ACTION_DIAL).setClass(this, MainActivity::class.java))})
                 }
             }
         }
@@ -49,20 +54,31 @@ class CallActivity: ComponentActivity() {
     val active=call.state==Call.STATE_ACTIVE
     val holding=call.state==Call.STATE_HOLDING
     var elapsed by remember(call.id,call.connectedAt){mutableLongStateOf(0)}
-    LaunchedEffect(call.id,call.connectedAt,active) {
-        while(active && call.connectedAt>0){elapsed=((System.currentTimeMillis()-call.connectedAt)/1000).coerceAtLeast(0);delay(1000)}
+    LaunchedEffect(call.id,call.connectedAt,active,holding) {
+        while((active || holding) && call.connectedAt>0){elapsed=((System.currentTimeMillis()-call.connectedAt)/1000).coerceAtLeast(0);delay(1000)}
     }
     val title=call.name ?: call.number ?: stringResource(R.string.unknown_caller)
-    Column(Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp),
+    val colors = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxSize()
+            .background(Brush.verticalGradient(listOf(colors.primaryContainer, colors.surface, colors.surface)))
+            .safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 20.dp),
         horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(16.dp)) {
         Text(stringResource(when(call.state){Call.STATE_RINGING->R.string.incoming_call;Call.STATE_ACTIVE->R.string.ongoing_call;Call.STATE_HOLDING->R.string.hold;Call.STATE_SELECT_PHONE_ACCOUNT->R.string.choose_sim;else->R.string.outgoing_call}),style=MaterialTheme.typography.titleMedium,color=MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(24.dp))
-        Surface(Modifier.size(112.dp),shape=CircleShape,color=MaterialTheme.colorScheme.primaryContainer) {
+        Spacer(Modifier.height(16.dp))
+        Surface(Modifier.size(104.dp), shape = CircleShape, color = colors.primaryContainer, tonalElevation = 6.dp) {
             Box(contentAlignment=Alignment.Center){Text(title.firstOrNull()?.uppercase() ?: "?",style=MaterialTheme.typography.displayMedium,color=MaterialTheme.colorScheme.onPrimaryContainer)}
         }
-        Text(title,style=MaterialTheme.typography.headlineLarge,textAlign=TextAlign.Center)
+        Text(title, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center,
+            maxLines = 3, overflow = TextOverflow.Ellipsis)
         if(call.name!=null && call.number!=null) Text(call.number,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        if(active) Text(java.lang.String.format(java.util.Locale.ROOT,"%02d:%02d",elapsed/60,elapsed%60),style=MaterialTheme.typography.titleLarge)
+        if (ringing && call.verificationFailed) {
+            Surface(shape = MaterialTheme.shapes.medium, color = colors.errorContainer) {
+                Text(stringResource(R.string.number_verification_failed), Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    color = colors.onErrorContainer, style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        if((active || holding) && call.connectedAt > 0) Text(java.lang.String.format(java.util.Locale.ROOT,"%02d:%02d",elapsed/60,elapsed%60),style=MaterialTheme.typography.titleLarge)
         ui.calls.filter {it.id!=call.id}.forEach { other ->
             ElevatedCard(Modifier.fillMaxWidth()) { Row(Modifier.padding(12.dp),verticalAlignment=Alignment.CenterVertically) {
                 Text(other.name ?: other.number ?: stringResource(R.string.unknown_caller),Modifier.weight(1f))
@@ -87,12 +103,25 @@ class CallActivity: ComponentActivity() {
                 }
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
                     FilledTonalButton(onClick=toggleKeypad,enabled=active,modifier=Modifier.weight(1f)){Text(stringResource(R.string.dial))}
-                    FilledTonalButton(onClick=onAdd,enabled=active&&call.canHold,modifier=Modifier.weight(1f)){Text(stringResource(R.string.add_call))}
+                    FilledTonalButton(onClick=onAdd,enabled = active && ui.canAddCall,modifier=Modifier.weight(1f)){Text(stringResource(R.string.add_call))}
                 }
                 if(call.canMerge) OutlinedButton(onClick={CallRuntime.action(call.id,"merge")},enabled=active){Text(stringResource(R.string.merge_calls))}
                 if(active && ui.routes.isNotEmpty()) {
-                    Text(stringResource(R.string.audio_output),style=MaterialTheme.typography.titleSmall)
-                    ui.routes.forEach { route -> FilterChip(selected=ui.currentRoute==route.key,onClick={CallRuntime.route(route.key)},label={Text(route.name)}) }
+                    Box {
+                        var expanded by remember(call.id) { mutableStateOf(false) }
+                        val current = ui.routes.firstOrNull { it.key == ui.currentRoute }
+                        OutlinedButton(onClick = { expanded = true }) {
+                            Text(current?.name ?: stringResource(R.string.audio_output))
+                        }
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            ui.routes.forEach { route ->
+                                DropdownMenuItem(text = { Text(route.name) }, onClick = {
+                                    expanded = false
+                                    CallRuntime.route(route.key)
+                                }, enabled = route.key != ui.currentRoute)
+                            }
+                        }
+                    }
                 }
                 if(active && keypad) listOf("123","456","789","*0#").forEach { row ->
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){row.forEach { digit->FilledTonalButton(onClick={CallRuntime.action(call.id,"dtmf:"+digit)},modifier=Modifier.weight(1f).heightIn(min=48.dp)){Text(digit.toString())} }}

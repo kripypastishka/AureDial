@@ -10,8 +10,8 @@ android {
         applicationId = "dev.auredial.app"
         minSdk = 29
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0-beta01"
+        versionCode = 3
+        versionName = "0.2.0-beta02"
     }
     buildFeatures { compose = true }
     compileOptions {

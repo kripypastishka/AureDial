@@ -30,3 +30,26 @@ jobs:
           name: auredial-debug
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Check Telecom on Android 15 emulator
+        if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+        timeout-minutes: 10
+        env:
+          AURE_IMAGE: system-images;android-35;google_apis;x86_64
+        run: |
+          sudo chown "$USER" /dev/kvm
+          sdkmanager --sdk_root="$ANDROID_HOME" emulator "$AURE_IMAGE"
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/auredial-avds"
+          mkdir -p "$ANDROID_AVD_HOME"
+          printf 'no\n' | avdmanager create avd --name smoke --package "$AURE_IMAGE" --device pixel_6 --path "$ANDROID_AVD_HOME/smoke.avd"
+          test -s "$ANDROID_AVD_HOME/smoke.ini"
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx smoke
+          adb start-server
+          "$ANDROID_HOME/emulator/emulator" -avd smoke -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -accel on > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
+          sleep 2
+          if ! kill -0 "$emulator_pid" || ! bash scripts/emulator-smoke.sh; then
+            cat "$RUNNER_TEMP/emulator.log"
+            exit 1
+          fi

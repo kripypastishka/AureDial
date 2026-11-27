@@ -1,7 +1,10 @@
 package dev.auredial.app
 
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -9,11 +12,12 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import androidx.core.content.ContextCompat
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** Activity-owned, main-thread-only preview. No call audio or routing changes. */
+/** Main-thread-only offline speech used by the settings preview and the in-call service. */
 class VoicePreview(private val context: Context) {
     private val main = Handler(Looper.getMainLooper())
     private val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -22,11 +26,21 @@ class VoicePreview(private val context: Context) {
         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
     private val status = MutableStateFlow(R.string.voice_loading)
     val state = status.asStateFlow()
+    val isReady: Boolean get() = ready && !closed
+    val isLoading: Boolean get() = status.value == R.string.voice_loading
     private var engine: TextToSpeech? = null
     private var ready = false
     private var closed = false
     private var utterance: String? = null
     private var focus: AudioFocusRequest? = null
+    private var observingAudio = false
+    private val audioObserver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (utterance == null) return
+            if (intent.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) finish(R.string.voice_interrupted)
+            else if (!systemAllowsSpeech()) finish(R.string.voice_silent)
+        }
+    }
     private val timeout = Runnable { finish(R.string.voice_error) }
 
     init {
@@ -56,7 +70,9 @@ class VoicePreview(private val context: Context) {
                     override fun onDone(id: String?) { complete(id, R.string.voice_ready) }
                     @Deprecated("Legacy callback")
                     override fun onError(id: String?) { complete(id, R.string.voice_error) }
+                    @Suppress("OVERRIDE_DEPRECATION")
                     override fun onError(id: String?, errorCode: Int) { complete(id, R.string.voice_error) }
+                    @Suppress("OVERRIDE_DEPRECATION")
                     override fun onStop(id: String?, interrupted: Boolean) { complete(id, R.string.voice_ready) }
                 }) == TextToSpeech.SUCCESS
         }.getOrDefault(false)
@@ -65,15 +81,31 @@ class VoicePreview(private val context: Context) {
     private fun complete(id: String?, result: Int) {
         main.post { if (!closed && id != null && id == utterance) finish(result) }
     }
-    fun play() { playText(context.getString(R.string.preview_text),false) }
+    private fun systemAllowsSpeech(): Boolean =
+        audio.ringerMode == AudioManager.RINGER_MODE_NORMAL &&
+            notifications.currentInterruptionFilter == NotificationManager.INTERRUPTION_FILTER_ALL
+
+    private fun observeAudio(): Boolean = runCatching {
+        ContextCompat.registerReceiver(context, audioObserver, IntentFilter().apply {
+            addAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+            addAction(AudioManager.RINGER_MODE_CHANGED_ACTION)
+            addAction(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED)
+        }, ContextCompat.RECEIVER_NOT_EXPORTED)
+        observingAudio = true
+    }.isSuccess
+
+    fun play() { playText(context.getString(R.string.preview_text), false) }
     fun playAnnouncement(text:String):Boolean = playText(text,true)
     private fun playText(text:String, ringing:Boolean):Boolean {
         if (closed || !ready) return false
-        finish(R.string.voice_ready)
-        if (audio.ringerMode != AudioManager.RINGER_MODE_NORMAL ||
-            notifications.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL ||
-            (audio.mode != AudioManager.MODE_NORMAL && !(ringing && audio.mode == AudioManager.MODE_RINGTONE))) {
+        if (utterance != null) finish(R.string.voice_ready)
+        if (!systemAllowsSpeech()) {
             status.value = R.string.voice_silent
+            return false
+        }
+        val mode = audio.mode
+        if (mode != AudioManager.MODE_NORMAL && !(ringing && mode == AudioManager.MODE_RINGTONE)) {
+            status.value = R.string.voice_interrupted
             return false
         }
         val id = UUID.randomUUID().toString()
@@ -88,10 +120,16 @@ class VoicePreview(private val context: Context) {
             return false
         }
         focus = request
+        if (!observeAudio() || !systemAllowsSpeech()) {
+            finish(R.string.voice_interrupted)
+            return false
+        }
         utterance = id
         status.value = R.string.voice_playing
         val success = runCatching {
-            engine?.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) == TextToSpeech.SUCCESS
+            val tts = engine ?: return@runCatching false
+            tts.setSpeechRate(readVoiceSettings(context).rate / 100f) == TextToSpeech.SUCCESS &&
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) == TextToSpeech.SUCCESS
         }.getOrDefault(false)
         if (success) main.postDelayed(timeout, 10000L) else finish(R.string.voice_error)
         return success
@@ -99,12 +137,18 @@ class VoicePreview(private val context: Context) {
     private fun finish(result: Int) {
         main.removeCallbacks(timeout)
         utterance = null
+        if (observingAudio) {
+            context.unregisterReceiver(audioObserver)
+            observingAudio = false
+        }
         runCatching { engine?.stop() }
         focus?.let { runCatching { audio.abandonAudioFocusRequest(it) } }
         focus = null
         status.value = result
     }
-    fun stop() { if (!closed && ready) finish(R.string.voice_ready) }
+    fun stop() {
+        if (!closed && utterance != null) finish(R.string.voice_ready)
+    }
     fun close() {
         if (closed) return
         stop()
@@ -112,4 +156,16 @@ class VoicePreview(private val context: Context) {
         runCatching { engine?.shutdown() }
         engine = null
     }
+}
+
+internal data class VoiceSettings(val enabled: Boolean, val contactsOnly: Boolean, val rate: Int)
+
+internal fun voicePreferences(context: Context) = context.getSharedPreferences("voice", Context.MODE_PRIVATE)
+
+internal fun readVoiceSettings(context: Context): VoiceSettings = voicePreferences(context).let {
+    VoiceSettings(
+        enabled = it.getBoolean("announce", false),
+        contactsOnly = it.getBoolean("contacts_only", false),
+        rate = it.getInt("rate", 100).coerceIn(75, 125),
+    )
 }
