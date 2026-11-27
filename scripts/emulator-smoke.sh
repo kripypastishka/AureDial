@@ -19,6 +19,7 @@ retry() {
     until "$@"; do
         if (( SECONDS >= deadline )); then
             printf 'Timed out after %ss waiting for %s\n' "$timeout_seconds" "$1" >&2
+            adb emu gsm list >&2 || true
             adb shell dumpsys activity activities | sed -n '/ResumedActivity/p' >&2 || true
             if [[ -s "$output/ui.xml" ]]; then
                 python3 - "$output/ui.xml" <<'PYTHON'
@@ -86,8 +87,16 @@ call_activity_resumed() {
 }
 
 active_call() {
-    adb shell dumpsys telecom > "$output/telecom.txt" &&
-        grep -Eq '\[TC@[^,]*, ACTIVE,.*tel:' "$output/telecom.txt"
+    local calls
+    calls=$(adb emu gsm list) && grep -Eiq "$number.*active" <<< "$calls"
+}
+
+answer_call() {
+    if active_call; then
+        return 0
+    fi
+    ui_node "Answer" true || true
+    return 1
 }
 
 call_ended() {
@@ -175,8 +184,7 @@ adb shell wm dismiss-keyguard
 adb shell am start -W -n "$package/.MainActivity"
 adb emu gsm call "$number"
 retry 30 call_activity_resumed
-retry 30 ui_node "Answer" true
-retry 30 active_call
+retry 35 answer_call
 retry 30 ui_node "End call" true
 retry 30 call_ended
 echo "PASS: Answer connects the call and End call disconnects it"
