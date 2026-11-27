@@ -6,6 +6,11 @@ package=dev.auredial.app
 number=2025550123
 output=$(mktemp -d)
 fixture=scripts/fixtures/tts
+
+adb() {
+    command adb -e "$@"
+}
+
 trap 'adb emu gsm cancel "$number" >/dev/null 2>&1 || true; adb shell settings delete secure tts_default_synth >/dev/null 2>&1 || true; rm -rf "$output"' EXIT
 
 retry() {
@@ -15,6 +20,18 @@ retry() {
         if (( SECONDS >= deadline )); then
             printf 'Timed out after %ss waiting for %s\n' "$timeout_seconds" "$1" >&2
             adb shell dumpsys activity activities | sed -n '/ResumedActivity/p' >&2 || true
+            if [[ -s "$output/ui.xml" ]]; then
+                python3 - "$output/ui.xml" <<'PYTHON'
+import sys
+import xml.etree.ElementTree as ET
+for node in ET.parse(sys.argv[1]).iter("node"):
+    label = node.get("text") or node.get("content-desc")
+    if label:
+        print(node.get("package"), repr(label), "clickable=" + node.get("clickable", ""))
+PYTHON
+            fi
+            adb logcat -d -b crash >&2 || true
+            adb logcat -d -s 'TextToSpeech:I' 'AureDialTestVoice:I' >&2 || true
             return 1
         fi
         sleep 2
@@ -111,8 +128,12 @@ adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
 
 adb shell am start -W -a android.intent.action.DIAL -d "tel:+1$number" -n "$package/.MainActivity"
-retry 45 ui_node "+1$number"
-echo "PASS: ACTION_DIAL pre-fills the keypad"
+keypad_passed=true
+if retry 30 ui_node "+1$number"; then
+    echo "PASS: ACTION_DIAL pre-fills the keypad"
+else
+    keypad_passed=false
+fi
 
 adb shell cmd role add-role-holder --user 0 android.app.role.DIALER "$package"
 adb shell pm grant "$package" android.permission.POST_NOTIFICATIONS
@@ -161,3 +182,5 @@ if grep -Fq "Process: $package," "$output/crashes.txt"; then
     exit 1
 fi
 echo "PASS: no AureDial crash recorded"
+
+[[ $keypad_passed == true ]]
