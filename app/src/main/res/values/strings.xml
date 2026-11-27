@@ -1,15 +1,15 @@
 <resources>
 <string name="app_name">AureDial</string>
-<string name="subtitle">Private by design</string>
-<string name="dial">Dial</string><string name="protect">Protection</string><string name="voice">Voice</string>
+
+<string name="dial">Dial</string><string name="protect">Protection</string>
 <string name="phone_number">Phone number</string><string name="open_dialer">Open system dialer</string><string name="delete_digit">Delete digit</string>
-<string name="dial_note">Calls use your existing phone app. AureDial is not yet a replacement dialer.</string>
-<string name="rules_title">Local call filtering</string><string name="rules_note">Experimental. Only explicitly listed international numbers are blocked. No reputation database is installed. Some calls never reach this service.</string>
-<string name="role_missing">Screening role not granted</string><string name="role_granted">Screening role granted</string><string name="request_role">Grant screening role</string><string name="role_unavailable">Screening role unavailable</string>
-<string name="enable_rules">Enable explicit blocking</string><string name="international_number">International number (+…)</string><string name="allow">Allow</string><string name="block">Block</string><string name="remove">Remove</string><string name="allow_list">Allowed numbers</string><string name="block_list">Blocked numbers</string><string name="empty_list">No entries</string>
-<string name="invalid_number">Enter a complete international number.</string><string name="save_error">Unable to save settings.</string><string name="action_failed">System action unavailable.</string>
-<string name="voice_title">Voice preview</string><string name="voice_note">Offline voice only. Honors silent mode and Do Not Disturb. Preview uses a test phrase.</string><string name="preview">Play test announcement</string><string name="stop">Stop</string><string name="preview_text">Incoming call. Voice test.</string>
-<string name="voice_loading">Preparing voice</string><string name="voice_ready">Voice ready</string><string name="voice_playing">Playing</string><string name="voice_unavailable">No compatible offline voice or TTS unavailable</string><string name="voice_silent">Silent mode or Do Not Disturb</string><string name="voice_focus_denied">Audio focus unavailable</string><string name="voice_error">Voice playback failed</string><string name="alpha">Engineering beta • spare phone only</string>
+<string name="dial_note">Calls are opened in your default phone app.</string>
+<string name="rules_title">Call protection</string><string name="rules_note">Filter incoming calls with your own lists. AureDial uses no online spam database.</string>
+<string name="role_missing">Screening role not granted</string><string name="role_granted">Screening role granted</string><string name="request_role">Grant screening role</string>
+<string name="enable_rules">Enable call filtering</string><string name="international_number">Phone number (+ country code preferred)</string><string name="allow">Allow</string><string name="block">Block</string><string name="remove">Remove</string><string name="allow_list">Allowed numbers</string><string name="block_list">Blocked numbers</string><string name="empty_list">No entries</string>
+<string name="invalid_number">Enter the full phone number with its + country code.</string><string name="save_error">Unable to save settings.</string><string name="action_failed">System action unavailable.</string>
+<string name="voice_title">Caller announcement</string><string name="preview">Play test announcement</string><string name="stop">Stop</string><string name="preview_text">Incoming call. Voice test.</string>
+<string name="voice_loading">Preparing voice</string><string name="voice_ready">Voice ready</string><string name="voice_playing">Playing</string><string name="voice_unavailable">No compatible offline voice or TTS unavailable</string><string name="voice_silent">Silent mode or Do Not Disturb</string><string name="voice_focus_denied">Audio focus unavailable</string><string name="voice_error">Voice playback failed</string>
 <string name="recents">Recents</string>
 <string name="contacts">Contacts</string>
 <string name="favorites">Favorites</string>
@@ -28,7 +28,7 @@
 <string name="resume_call">Resume</string>
 <string name="add_call">Add call</string>
 <string name="merge_calls">Merge calls</string>
-<string name="silence">Silence</string>
+
 <string name="audio_output">Audio output</string>
 <string name="route_earpiece">Earpiece</string>
 <string name="route_speaker">Speaker</string>
@@ -39,7 +39,7 @@
 <string name="sim_number">SIM %1$d</string>
 <string name="announce_caller">Incoming call. %1$s</string>
 <string name="announce_enabled">Announce incoming caller</string>
-<string name="announce_limit">Experimental offline announcement on the visible call screen. Audio focus or silent mode may prevent playback. System ringtone is unchanged.</string>
+<string name="announce_limit">Plays an offline voice on the visible incoming call screen. Respects silent mode and Do Not Disturb.</string>
 <string name="default_note">Set AureDial as default to see call history and handle calls.</string>
 <string name="set_default">Set default phone app</string>
 <string name="beta_notice">Engineering beta: use a spare phone only. Incoming notifications, audio and emergency behavior have not been validated on hardware. Restore your original phone app after testing.</string>
@@ -52,4 +52,23 @@
 <string name="make_call">Call</string>
 <string name="continue_action">Continue</string>
 <string name="cancel_action">Cancel</string>
+<string name="silence_failed">Silence failed number verification</string>
+<string name="silence_failed_note">Only for numbers outside your contacts when the carrier explicitly reports a failed check. Requires Contacts access.</string>
+<string name="number_verification_failed">Number verification failed</string>
+<string name="contacts_only">Only announce saved contacts</string>
+<string name="voice_rate">Speech rate · %1$d%%</string>
+<string name="send_message">Send message</string>
+<string name="edit_contact">Edit contact</string>
+<string name="save_contact">Save contact</string>
+<string name="confirm_block">Block this number?</string>
+<string name="confirm_block_note">Enable call filtering and grant AureDial the screening role to apply this rule.</string>
+<string name="block_saved">Number added to the blocked list.</string>
+<string name="keypad_letters">ABC|DEF|GHI|JKL|MNO|PQRS|TUV|WXYZ</string>
+<string name="voice_interrupted">Speech interrupted by a change in audio routing or call state.</string>
+<string name="all_calls">All</string>
+<string name="missed_calls">Missed</string>
+<string name="blocked_calls">Blocked</string>
+<string name="rejected_call">Declined call</string>
+<string name="blocked_call">Blocked call</string>
+<string name="close_details">Close</string>
 </resources>

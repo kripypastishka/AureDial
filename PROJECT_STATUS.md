@@ -1,7 +1,23 @@
-# AureDial 0.2.0-beta01
+# AureDial 0.2.0-beta02
 
-Implemented in source: default dialer role, Telecom in-call service and notifications, answer/reject/end, hold/mute, DTMF, endpoint selection, SIM selection, local contacts/favorites and recents with role/permissions, offline opt-in incoming announcement when call UI is visible, existing local rules, light/dark themes.
+## Звонки и защита
 
-Not validated on real devices. Do not use as primary dialer until physical regression tests pass. System controls ringing; no guaranteed ducking, Bluetooth TTS routing or background speech. No commercial spam data provider, server, automated reputation classification, call recording, visual voicemail, Google proprietary call screening, contact editing, full T9 or advanced accessibility validation. Call history bounded at 250; contacts bounded at 5000. No secrets or internet permission.
+- Входящие и исходящие вызовы обслуживает Android Telecom. Выбор SIM, объединение, удержание и аудиовыход зависят от предоставленных Telecom возможностей.
+- Списки выключены до явного включения. Белый список имеет приоритет. При недоступных данных или истечении внутреннего лимита в 1,2 секунды фильтр пропускает звонок.
+- Номера из базы контактов могут поступать фильтру только при разрешении на контакты. Скрытые номера могут не поступать вовсе. Для правил предпочтителен формат `+код страны`. Национальный формат преобразуется при одном активном модеме и совпадении страны SIM и сети.
+- Провал проверки номера оператором — признак возможной подмены. Необязательный режим выключает звук только при явном провале проверки и успешном поиске, который не нашёл номер в контактах. Звонок остаётся доступен для ответа. Базы репутации и облачного определения организаций пока нет.
 
-CI must confirm compilation and lint. A green build is not certification of telephony safety.
+## Диктор
+
+Имя берётся из локальных контактов. Для остальных звонков используются цифры номера или нейтральная фраза, если включено озвучивание всех абонентов. Нужно установить подходящий офлайн-голос Android. Диктор работает на видимом экране входящего вызова, прекращает речь при смене состояния звонка и пропускает воспроизведение при беззвучном режиме, DND или отказе в аудиофокусе. Рингтоном управляет Android.
+
+## Проверки и ограничения
+
+Модульные тесты охватывают приоритет и нормализацию правил, пропуск при отсутствии сигнала, ограничение попыток озвучивания, отмену и поиск T9. Android CI проверяет сборку и Lint. До стабильного релиза нужно подтвердить поведение на физических телефонах в следующих сценариях:
+
+- Входящий вызов на заблокированном экране и при запрещённом полноэкранном уведомлении.
+- Фактическое произношение имени и прекращение речи при быстром ответе, DND и отключении гарнитуры.
+- Две SIM, второй входящий, конференция и аудиомаршруты Bluetooth.
+- Работа фильтра с реальным результатом проверки номера оператора.
+
+Интерактивного Call Screen с голосовым диалогом, записи звонков и визуальной голосовой почты в этой сборке нет.

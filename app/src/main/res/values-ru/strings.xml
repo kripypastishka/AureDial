@@ -1,14 +1,14 @@
 <resources>
-<string name="app_name">AureDial</string><string name="subtitle">Конфиденциальность по умолчанию</string>
-<string name="dial">Набор</string><string name="protect">Защита</string><string name="voice">Диктор</string>
+<string name="app_name">AureDial</string>
+<string name="dial">Набор</string><string name="protect">Защита</string>
 <string name="phone_number">Номер телефона</string><string name="open_dialer">Открыть системную звонилку</string><string name="delete_digit">Удалить цифру</string>
-<string name="dial_note">Звонки выполняются через существующую звонилку. AureDial пока не заменяет ее.</string>
-<string name="rules_title">Локальная фильтрация</string><string name="rules_note">Экспериментальный режим. Блокируются только явно заданные международные номера. Базы репутации пока нет. Некоторые вызовы недоступны фильтрации.</string>
-<string name="role_missing">Роль фильтрации не предоставлена</string><string name="role_granted">Роль фильтрации предоставлена</string><string name="request_role">Предоставить роль фильтрации</string><string name="role_unavailable">Роль фильтрации недоступна</string>
-<string name="enable_rules">Включить блокировку по списку</string><string name="international_number">Международный номер (+…)</string><string name="allow">Разрешить</string><string name="block">Блокировать</string><string name="remove">Удалить</string><string name="allow_list">Белый список</string><string name="block_list">Черный список</string><string name="empty_list">Нет записей</string>
-<string name="invalid_number">Введи полный международный номер.</string><string name="save_error">Не удалось сохранить настройки.</string><string name="action_failed">Системное действие недоступно.</string>
-<string name="voice_title">Проверка диктора</string><string name="voice_note">Только офлайн-голос. Учитываются беззвучный режим и «Не беспокоить». Предпрослушивание использует тестовую фразу.</string><string name="preview">Прослушать объявление</string><string name="stop">Остановить</string><string name="preview_text">Входящий звонок. Проверка голоса.</string>
-<string name="voice_loading">Подготовка голоса</string><string name="voice_ready">Голос готов</string><string name="voice_playing">Воспроизведение</string><string name="voice_unavailable">Нет подходящего офлайн-голоса или TTS недоступен</string><string name="voice_silent">Беззвучный режим или «Не беспокоить»</string><string name="voice_focus_denied">Аудиофокус недоступен</string><string name="voice_error">Ошибка воспроизведения</string><string name="alpha">Инженерная бета • только запасной телефон</string>
+<string name="dial_note">Вызов откроется в твоём приложении «Телефон» по умолчанию.</string>
+<string name="rules_title">Защита от звонков</string><string name="rules_note">Фильтруй входящие звонки по своим спискам. AureDial работает без сетевой базы спама.</string>
+<string name="role_missing">Роль фильтрации не предоставлена</string><string name="role_granted">Роль фильтрации предоставлена</string><string name="request_role">Предоставить роль фильтрации</string>
+<string name="enable_rules">Фильтровать звонки</string><string name="international_number">Номер телефона (желательно с + и кодом страны)</string><string name="allow">Разрешить</string><string name="block">Блокировать</string><string name="remove">Удалить</string><string name="allow_list">Белый список</string><string name="block_list">Черный список</string><string name="empty_list">Нет записей</string>
+<string name="invalid_number">Введи полный номер с + и кодом страны.</string><string name="save_error">Не удалось сохранить настройки.</string><string name="action_failed">Системное действие недоступно.</string>
+<string name="voice_title">Диктор абонента</string><string name="preview">Прослушать объявление</string><string name="stop">Остановить</string><string name="preview_text">Входящий звонок. Проверка голоса.</string>
+<string name="voice_loading">Подготовка голоса</string><string name="voice_ready">Голос готов</string><string name="voice_playing">Воспроизведение</string><string name="voice_unavailable">Нет подходящего офлайн-голоса или TTS недоступен</string><string name="voice_silent">Беззвучный режим или «Не беспокоить»</string><string name="voice_focus_denied">Аудиофокус недоступен</string><string name="voice_error">Ошибка воспроизведения</string>
 <string name="recents">Недавние</string>
 <string name="contacts">Контакты</string>
 <string name="favorites">Избранное</string>
@@ -27,7 +27,7 @@
 <string name="resume_call">Продолжить</string>
 <string name="add_call">Добавить звонок</string>
 <string name="merge_calls">Объединить</string>
-<string name="silence">Без звука</string>
+
 <string name="audio_output">Аудиовыход</string>
 <string name="route_earpiece">Разговорный динамик</string>
 <string name="route_speaker">Громкая связь</string>
@@ -38,7 +38,7 @@
 <string name="sim_number">SIM %1$d</string>
 <string name="announce_caller">Входящий звонок. %1$s</string>
 <string name="announce_enabled">Озвучивать абонента</string>
-<string name="announce_limit">Экспериментальное офлайн-озвучивание при открытом экране вызова. Аудиофокус или беззвучный режим могут запретить речь. Системный рингтон не изменяется.</string>
+<string name="announce_limit">Офлайн-голос на открытом экране входящего вызова. Учитывает беззвучный режим и «Не беспокоить».</string>
 <string name="default_note">Назначь AureDial основной звонилкой для истории и управления звонками.</string>
 <string name="set_default">Назначить основной звонилкой</string>
 <string name="beta_notice">Инженерная бета: только для запасного телефона. Уведомления, звук и экстренные вызовы не проверены на устройстве. После теста верни прежнюю звонилку.</string>
@@ -51,4 +51,23 @@
 <string name="make_call">Позвонить</string>
 <string name="continue_action">Продолжить</string>
 <string name="cancel_action">Отмена</string>
+<string name="silence_failed">Отключать звук при сбое проверки номера</string>
+<string name="silence_failed_note">Только для номеров вне контактов, когда оператор сообщает о провале проверки. Нужен доступ к контактам.</string>
+<string name="number_verification_failed">Номер не прошёл проверку</string>
+<string name="contacts_only">Озвучивать только известные контакты</string>
+<string name="voice_rate">Скорость речи · %1$d%%</string>
+<string name="send_message">Написать сообщение</string>
+<string name="edit_contact">Изменить контакт</string>
+<string name="save_contact">Сохранить контакт</string>
+<string name="confirm_block">Заблокировать номер?</string>
+<string name="confirm_block_note">Чтобы правило действовало, включи фильтрацию и назначь AureDial фильтром звонков.</string>
+<string name="block_saved">Номер добавлен в список блокировки.</string>
+<string name="keypad_letters">АБВГ|ДЕЖЗ|ИЙКЛ|МНОП|РСТУ|ФХЦЧ|ШЩЪЫ|ЬЭЮЯ</string>
+<string name="voice_interrupted">Озвучивание остановлено из-за изменения аудиовыхода или состояния звонка.</string>
+<string name="all_calls">Все</string>
+<string name="missed_calls">Пропущенные</string>
+<string name="blocked_calls">Заблокированные</string>
+<string name="rejected_call">Отклонённый вызов</string>
+<string name="blocked_call">Заблокированный вызов</string>
+<string name="close_details">Закрыть</string>
 </resources>
