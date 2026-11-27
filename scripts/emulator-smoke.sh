@@ -93,7 +93,9 @@ install_voice_fixture() {
     "$tools/aapt2" link -I "$android_jar" --manifest "$fixture/AndroidManifest.xml" \
         --min-sdk-version 29 --target-sdk-version 35 -o "$output/unsigned.apk"
     zip -q -j "$output/unsigned.apk" "$output/dex/classes.dex"
-    "$tools/apksigner" sign --ks "$HOME/.android/debug.keystore" --ks-pass pass:android \
+    keytool -genkeypair -storetype PKCS12 -keystore "$output/test-voice.p12" -storepass android \
+        -alias test-voice -keyalg RSA -keysize 2048 -validity 2 -dname "CN=AureDial CI" >/dev/null 2>&1
+    "$tools/apksigner" sign --ks "$output/test-voice.p12" --ks-pass pass:android \
         --out "$output/test-voice.apk" "$output/unsigned.apk"
     adb install -r "$output/test-voice.apk"
     adb shell settings put secure tts_default_synth dev.auredial.testvoice
