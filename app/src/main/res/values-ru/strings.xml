@@ -7,6 +7,48 @@
 <string name="role_missing">Роль фильтрации не предоставлена</string><string name="role_granted">Роль фильтрации предоставлена</string><string name="request_role">Предоставить роль фильтрации</string><string name="role_unavailable">Роль фильтрации недоступна</string>
 <string name="enable_rules">Включить блокировку по списку</string><string name="international_number">Международный номер (+…)</string><string name="allow">Разрешить</string><string name="block">Блокировать</string><string name="remove">Удалить</string><string name="allow_list">Белый список</string><string name="block_list">Черный список</string><string name="empty_list">Нет записей</string>
 <string name="invalid_number">Введи полный международный номер.</string><string name="save_error">Не удалось сохранить настройки.</string><string name="action_failed">Системное действие недоступно.</string>
-<string name="voice_title">Проверка диктора</string><string name="voice_note">Только офлайн-голос. Учитываются беззвучный режим и «Не беспокоить». Озвучивание входящих вызовов пока не подключено.</string><string name="preview">Прослушать объявление</string><string name="stop">Остановить</string><string name="preview_text">Входящий звонок. Проверка голоса.</string>
-<string name="voice_loading">Подготовка голоса</string><string name="voice_ready">Голос готов</string><string name="voice_playing">Воспроизведение</string><string name="voice_unavailable">Нет подходящего офлайн-голоса или TTS недоступен</string><string name="voice_silent">Беззвучный режим или «Не беспокоить»</string><string name="voice_focus_denied">Аудиофокус недоступен</string><string name="voice_error">Ошибка воспроизведения</string><string name="alpha">Альфа-версия • не для повседневных звонков</string>
+<string name="voice_title">Проверка диктора</string><string name="voice_note">Только офлайн-голос. Учитываются беззвучный режим и «Не беспокоить». Предпрослушивание использует тестовую фразу.</string><string name="preview">Прослушать объявление</string><string name="stop">Остановить</string><string name="preview_text">Входящий звонок. Проверка голоса.</string>
+<string name="voice_loading">Подготовка голоса</string><string name="voice_ready">Голос готов</string><string name="voice_playing">Воспроизведение</string><string name="voice_unavailable">Нет подходящего офлайн-голоса или TTS недоступен</string><string name="voice_silent">Беззвучный режим или «Не беспокоить»</string><string name="voice_focus_denied">Аудиофокус недоступен</string><string name="voice_error">Ошибка воспроизведения</string><string name="alpha">Инженерная бета • только запасной телефон</string>
+<string name="recents">Недавние</string>
+<string name="contacts">Контакты</string>
+<string name="favorites">Избранное</string>
+<string name="settings">Настройки</string>
+<string name="incoming_call">Входящий звонок</string>
+<string name="outgoing_call">Исходящий звонок</string>
+<string name="ongoing_call">Разговор</string>
+<string name="missed_call">Пропущенный звонок</string>
+<string name="unknown_caller">Неизвестный абонент</string>
+<string name="answer">Принять</string>
+<string name="reject">Отклонить</string>
+<string name="end_call">Завершить</string>
+<string name="mute">Микрофон</string>
+<string name="unmute">Включить микрофон</string>
+<string name="hold">Удержание</string>
+<string name="resume_call">Продолжить</string>
+<string name="add_call">Добавить звонок</string>
+<string name="merge_calls">Объединить</string>
+<string name="silence">Без звука</string>
+<string name="audio_output">Аудиовыход</string>
+<string name="route_earpiece">Разговорный динамик</string>
+<string name="route_speaker">Громкая связь</string>
+<string name="route_wired">Наушники</string>
+<string name="route_bluetooth">Bluetooth</string>
+<string name="choose_sim">Выбрать SIM</string>
+<string name="no_sim">Информация о SIM недоступна</string>
+<string name="sim_number">SIM %1$d</string>
+<string name="announce_caller">Входящий звонок. %1$s</string>
+<string name="announce_enabled">Озвучивать абонента</string>
+<string name="announce_limit">Экспериментальное офлайн-озвучивание при открытом экране вызова. Аудиофокус или беззвучный режим могут запретить речь. Системный рингтон не изменяется.</string>
+<string name="default_note">Назначь AureDial основной звонилкой для истории и управления звонками.</string>
+<string name="set_default">Назначить основной звонилкой</string>
+<string name="beta_notice">Инженерная бета: только для запасного телефона. Уведомления, звук и экстренные вызовы не проверены на устройстве. После теста верни прежнюю звонилку.</string>
+<string name="permissions">Разрешения</string>
+<string name="notifications">Включить уведомления</string>
+<string name="fullscreen">Полноэкранные вызовы</string>
+<string name="permission_note">Разрешение необходимо для отображения локальных данных.</string>
+<string name="search">Поиск</string>
+<string name="close_keypad">Закрыть клавиатуру</string>
+<string name="make_call">Позвонить</string>
+<string name="continue_action">Продолжить</string>
+<string name="cancel_action">Отмена</string>
 </resources>

@@ -65,14 +65,16 @@ class VoicePreview(private val context: Context) {
     private fun complete(id: String?, result: Int) {
         main.post { if (!closed && id != null && id == utterance) finish(result) }
     }
-    fun play() {
-        if (closed || !ready) return
+    fun play() { playText(context.getString(R.string.preview_text),false) }
+    fun playAnnouncement(text:String):Boolean = playText(text,true)
+    private fun playText(text:String, ringing:Boolean):Boolean {
+        if (closed || !ready) return false
         finish(R.string.voice_ready)
         if (audio.ringerMode != AudioManager.RINGER_MODE_NORMAL ||
             notifications.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL ||
-            audio.mode != AudioManager.MODE_NORMAL) {
+            (audio.mode != AudioManager.MODE_NORMAL && !(ringing && audio.mode == AudioManager.MODE_RINGTONE))) {
             status.value = R.string.voice_silent
-            return
+            return false
         }
         val id = UUID.randomUUID().toString()
         val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
@@ -83,15 +85,16 @@ class VoicePreview(private val context: Context) {
         if (runCatching { audio.requestAudioFocus(request) }.getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
             != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             status.value = R.string.voice_focus_denied
-            return
+            return false
         }
         focus = request
         utterance = id
         status.value = R.string.voice_playing
         val success = runCatching {
-            engine?.speak(context.getString(R.string.preview_text), TextToSpeech.QUEUE_FLUSH, null, id) == TextToSpeech.SUCCESS
+            engine?.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) == TextToSpeech.SUCCESS
         }.getOrDefault(false)
         if (success) main.postDelayed(timeout, 10000L) else finish(R.string.voice_error)
+        return success
     }
     private fun finish(result: Int) {
         main.removeCallbacks(timeout)

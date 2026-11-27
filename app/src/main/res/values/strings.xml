@@ -8,6 +8,48 @@
 <string name="role_missing">Screening role not granted</string><string name="role_granted">Screening role granted</string><string name="request_role">Grant screening role</string><string name="role_unavailable">Screening role unavailable</string>
 <string name="enable_rules">Enable explicit blocking</string><string name="international_number">International number (+…)</string><string name="allow">Allow</string><string name="block">Block</string><string name="remove">Remove</string><string name="allow_list">Allowed numbers</string><string name="block_list">Blocked numbers</string><string name="empty_list">No entries</string>
 <string name="invalid_number">Enter a complete international number.</string><string name="save_error">Unable to save settings.</string><string name="action_failed">System action unavailable.</string>
-<string name="voice_title">Voice preview</string><string name="voice_note">Offline voice only. Honors silent mode and Do Not Disturb. Incoming call announcements are not connected yet.</string><string name="preview">Play test announcement</string><string name="stop">Stop</string><string name="preview_text">Incoming call. Voice test.</string>
-<string name="voice_loading">Preparing voice</string><string name="voice_ready">Voice ready</string><string name="voice_playing">Playing</string><string name="voice_unavailable">No compatible offline voice or TTS unavailable</string><string name="voice_silent">Silent mode or Do Not Disturb</string><string name="voice_focus_denied">Audio focus unavailable</string><string name="voice_error">Voice playback failed</string><string name="alpha">Developer alpha • not for everyday calls</string>
+<string name="voice_title">Voice preview</string><string name="voice_note">Offline voice only. Honors silent mode and Do Not Disturb. Preview uses a test phrase.</string><string name="preview">Play test announcement</string><string name="stop">Stop</string><string name="preview_text">Incoming call. Voice test.</string>
+<string name="voice_loading">Preparing voice</string><string name="voice_ready">Voice ready</string><string name="voice_playing">Playing</string><string name="voice_unavailable">No compatible offline voice or TTS unavailable</string><string name="voice_silent">Silent mode or Do Not Disturb</string><string name="voice_focus_denied">Audio focus unavailable</string><string name="voice_error">Voice playback failed</string><string name="alpha">Engineering beta • spare phone only</string>
+<string name="recents">Recents</string>
+<string name="contacts">Contacts</string>
+<string name="favorites">Favorites</string>
+<string name="settings">Settings</string>
+<string name="incoming_call">Incoming call</string>
+<string name="outgoing_call">Outgoing call</string>
+<string name="ongoing_call">Call in progress</string>
+<string name="missed_call">Missed call</string>
+<string name="unknown_caller">Unknown caller</string>
+<string name="answer">Answer</string>
+<string name="reject">Decline</string>
+<string name="end_call">End call</string>
+<string name="mute">Mute</string>
+<string name="unmute">Unmute</string>
+<string name="hold">Hold</string>
+<string name="resume_call">Resume</string>
+<string name="add_call">Add call</string>
+<string name="merge_calls">Merge calls</string>
+<string name="silence">Silence</string>
+<string name="audio_output">Audio output</string>
+<string name="route_earpiece">Earpiece</string>
+<string name="route_speaker">Speaker</string>
+<string name="route_wired">Headset</string>
+<string name="route_bluetooth">Bluetooth</string>
+<string name="choose_sim">Choose SIM</string>
+<string name="no_sim">No available SIM information</string>
+<string name="sim_number">SIM %1$d</string>
+<string name="announce_caller">Incoming call. %1$s</string>
+<string name="announce_enabled">Announce incoming caller</string>
+<string name="announce_limit">Experimental offline announcement on the visible call screen. Audio focus or silent mode may prevent playback. System ringtone is unchanged.</string>
+<string name="default_note">Set AureDial as default to see call history and handle calls.</string>
+<string name="set_default">Set default phone app</string>
+<string name="beta_notice">Engineering beta: use a spare phone only. Incoming notifications, audio and emergency behavior have not been validated on hardware. Restore your original phone app after testing.</string>
+<string name="permissions">Grant permissions</string>
+<string name="notifications">Enable notifications</string>
+<string name="fullscreen">Full-screen call settings</string>
+<string name="permission_note">Access is needed to display local data.</string>
+<string name="search">Search</string>
+<string name="close_keypad">Close keypad</string>
+<string name="make_call">Call</string>
+<string name="continue_action">Continue</string>
+<string name="cancel_action">Cancel</string>
 </resources>
