@@ -15,7 +15,7 @@
 gradle :domain:test :app:lintDebug :app:assembleDebug
 ```
 
-Debug APK создаётся в `app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions запускает те же проверки и сохраняет APK в артефакте `auredial-debug`. Установка поверх предыдущей сборки требует той же подписи.
+Debug APK создаётся в `app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions запускает те же проверки и сохраняет APK в артефакте `auredial-debug`. Установка поверх предыдущей сборки требует той же подписи. Скрипт `scripts/emulator-smoke.sh` проверяет системный запуск клавиатуры и уведомление о входящем вызове на Android 15.
 
 ## Настройка
 
