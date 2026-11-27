@@ -19,7 +19,7 @@ retry() {
     until "$@"; do
         if (( SECONDS >= deadline )); then
             printf 'Timed out after %ss waiting for %s\n' "$timeout_seconds" "$1" >&2
-            adb emu gsm list >&2 || true
+            adb shell cmd notification list >&2 || true
             adb shell dumpsys activity activities | sed -n '/ResumedActivity/p' >&2 || true
             if [[ -s "$output/ui.xml" ]]; then
                 python3 - "$output/ui.xml" <<'PYTHON'
@@ -86,13 +86,8 @@ call_activity_resumed() {
         grep -Eq 'ResumedActivity[:=].*dev\.auredial\.app/\.CallActivity' "$output/activity.txt"
 }
 
-active_call() {
-    local calls
-    calls=$(adb emu gsm list) && grep -Eiq "$number.*active" <<< "$calls"
-}
-
 answer_call() {
-    if active_call; then
+    if ui_node "Call in progress"; then
         return 0
     fi
     ui_node "Answer" true || true
@@ -100,8 +95,12 @@ answer_call() {
 }
 
 call_ended() {
-    local calls
-    calls=$(adb emu gsm list) && [[ $calls != *"$number"* ]]
+    local notifications
+    notifications=$(adb shell cmd notification list) || return 1
+    if grep -Fq '|dev.auredial.app|72|' <<< "$notifications"; then
+        return 1
+    fi
+    ! call_activity_resumed
 }
 
 notification_present() {
