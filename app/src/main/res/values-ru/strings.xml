@@ -1,0 +1,12 @@
+<resources>
+<string name="app_name">AureDial</string><string name="subtitle">Конфиденциальность по умолчанию</string>
+<string name="dial">Набор</string><string name="protect">Защита</string><string name="voice">Диктор</string>
+<string name="phone_number">Номер телефона</string><string name="open_dialer">Открыть системную звонилку</string><string name="delete_digit">Удалить цифру</string>
+<string name="dial_note">Звонки выполняются через существующую звонилку. AureDial пока не заменяет ее.</string>
+<string name="rules_title">Локальная фильтрация</string><string name="rules_note">Экспериментальный режим. Блокируются только явно заданные международные номера. Базы репутации пока нет. Некоторые вызовы недоступны фильтрации.</string>
+<string name="role_missing">Роль фильтрации не предоставлена</string><string name="role_granted">Роль фильтрации предоставлена</string><string name="request_role">Предоставить роль фильтрации</string><string name="role_unavailable">Роль фильтрации недоступна</string>
+<string name="enable_rules">Включить блокировку по списку</string><string name="international_number">Международный номер (+…)</string><string name="allow">Разрешить</string><string name="block">Блокировать</string><string name="remove">Удалить</string><string name="allow_list">Белый список</string><string name="block_list">Черный список</string><string name="empty_list">Нет записей</string>
+<string name="invalid_number">Введи полный международный номер.</string><string name="save_error">Не удалось сохранить настройки.</string><string name="action_failed">Системное действие недоступно.</string>
+<string name="voice_title">Проверка диктора</string><string name="voice_note">Только офлайн-голос. Учитываются беззвучный режим и «Не беспокоить». Озвучивание входящих вызовов пока не подключено.</string><string name="preview">Прослушать объявление</string><string name="stop">Остановить</string><string name="preview_text">Входящий звонок. Проверка голоса.</string>
+<string name="voice_loading">Подготовка голоса</string><string name="voice_ready">Голос готов</string><string name="voice_playing">Воспроизведение</string><string name="voice_unavailable">Нет подходящего офлайн-голоса или TTS недоступен</string><string name="voice_silent">Беззвучный режим или «Не беспокоить»</string><string name="voice_focus_denied">Аудиофокус недоступен</string><string name="voice_error">Ошибка воспроизведения</string><string name="alpha">Альфа-версия • не для повседневных звонков</string>
+</resources>
