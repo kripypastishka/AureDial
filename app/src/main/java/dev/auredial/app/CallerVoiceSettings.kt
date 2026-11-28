@@ -1,14 +1,21 @@
 package dev.auredial.app
 
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import androidx.lifecycle.Lifecycle
@@ -17,7 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
 
 @Composable
-internal fun VoicePage(onError: (Int) -> Unit) {
+internal fun VoicePage(back: () -> Unit, onError: (Int) -> Unit) {
     val context = LocalContext.current
     val preferences = remember(context) { voicePreferences(context) }
     var settings by remember(context) { mutableStateOf(readVoiceSettings(context)) }
@@ -29,7 +36,14 @@ internal fun VoicePage(onError: (Int) -> Unit) {
         readyPlayer = opened
         onDispose { opened.close() }
     }
-    val player = readyPlayer ?: return
+    val player = readyPlayer
+    if (player == null) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            PageTop(stringResource(R.string.voice_title), back)
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        return
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { player.stop() }
     val status by player.state.collectAsStateWithLifecycle()
     val engines by player.engineOptions.collectAsStateWithLifecycle()
@@ -49,62 +63,87 @@ internal fun VoicePage(onError: (Int) -> Unit) {
         settings = readVoiceSettings(context)
     }
 
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(stringResource(R.string.voice_title), style = MaterialTheme.typography.titleLarge)
+    val scheme = MaterialTheme.colorScheme
+    val playing = status == R.string.voice_playing
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        PageTop(stringResource(R.string.voice_title), back)
+        AureCard(color = scheme.primaryContainer) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                AureBadge(
+                    stringResource(status), icon = if (playing) R.drawable.aure_sound else R.drawable.aure_wave,
+                    color = scheme.surface, ink = scheme.onSurface,
+                )
+                VoiceWave(Modifier.fillMaxWidth().height(64.dp), scheme.onPrimaryContainer, playing)
+                AureAction(
+                    stringResource(if (playing) R.string.stop else R.string.preview),
+                    onClick = { if (playing) player.stop() else player.play(settings) },
+                    modifier = Modifier.fillMaxWidth(), icon = if (playing) R.drawable.aure_stop else R.drawable.aure_play,
+                    enabled = status != R.string.voice_loading && status != R.string.voice_unavailable,
+                )
+                if (status == R.string.voice_unavailable) {
+                    AureOption(stringResource(R.string.install_voice), R.drawable.aure_sound, onClick = {
+                        if (!player.openVoiceInstaller()) onError(R.string.open_tts_manually)
+                    })
+                    AureOption(stringResource(R.string.voice_reload), R.drawable.aure_check, onClick = { generation++ })
+                }
+            }
+        }
+        AureCard {
             SettingsSwitch(R.string.announce_enabled, settings.enabled) {
                 preferences.edit { putBoolean("announce", it) }
                 settings = settings.copy(enabled = it)
             }
+            HorizontalDivider(Modifier.padding(horizontal = 14.dp), color = scheme.outlineVariant)
             SettingsSwitch(R.string.contacts_only, settings.contactsOnly, settings.enabled) {
                 preferences.edit { putBoolean("contacts_only", it) }
                 settings = settings.copy(contactsOnly = it)
             }
-            Text(stringResource(R.string.announce_limit), style = MaterialTheme.typography.bodySmall)
-            Text(stringResource(status), style = MaterialTheme.typography.bodyMedium)
-            if (status == R.string.voice_unavailable) {
-                TextButton(onClick = { if (!player.openVoiceInstaller()) onError(R.string.open_tts_manually) }) {
-                    Text(stringResource(R.string.install_voice))
-                }
-                TextButton(onClick = { generation++ }) { Text(stringResource(R.string.voice_reload)) }
-            }
-            if (status == R.string.voice_playing) {
-                OutlinedButton(onClick = player::stop, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.stop))
-                }
-            } else {
-                Button(onClick = { player.play(settings) }, enabled = status != R.string.voice_loading && status != R.string.voice_unavailable,
-                    modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.preview)) }
-            }
-            TextButton(onClick = { advanced = !advanced }) {
-                Text(stringResource(if (advanced) R.string.voice_fewer_settings else R.string.voice_more_settings))
-            }
-            if (advanced) {
-                HorizontalDivider()
-                VoiceChoices(R.string.voice_engine, R.string.voice_system_default, engines, settings.selection.engine) {
-                    saveSelection(settings.selection.copy(engine = it, voice = null))
-                }
-                val languages = listOf(VoiceOption("ru-RU", stringResource(R.string.voice_russian)),
-                    VoiceOption("en-US", stringResource(R.string.voice_english)))
-                VoiceChoices(R.string.voice_language, R.string.voice_system_default, languages, settings.selection.language) {
-                    saveSelection(settings.selection.copy(language = it, voice = null))
-                }
-                VoiceChoices(R.string.voice_actor, R.string.voice_automatic, voices, settings.selection.voice) {
-                    saveSelection(settings.selection.copy(voice = it))
-                }
-                VoiceSlider(R.string.voice_rate, settings.rate, 75, 125, 9) { savePercent("rate", it) }
-                VoiceSlider(R.string.voice_pitch, settings.pitch, 75, 125, 9) { savePercent("pitch", it) }
-                VoiceSlider(R.string.voice_volume, settings.volume, 10, 100, 8) { savePercent("volume", it) }
-                VoiceSlider(R.string.voice_delay, settings.timing.delayMs.toInt(), 350, 4_000, 0) { savePercent("delay_ms", it) }
-                VoiceSlider(R.string.voice_count, settings.timing.count, 1, 3, 1) { savePercent("count", it) }
-                if (settings.timing.count > 1) {
-                    VoiceSlider(R.string.voice_interval, settings.timing.intervalMs.toInt(), 2_000, 7_000, 9) {
-                        savePercent("interval_ms", it)
+        }
+        Text(stringResource(R.string.announce_limit), color = scheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall)
+        AureCard {
+            AureOption(stringResource(if (advanced) R.string.voice_fewer_settings else R.string.voice_more_settings),
+                R.drawable.aure_settings, onClick = { advanced = !advanced }, selected = advanced)
+        }
+        AnimatedVisibility(
+            visible = advanced,
+            enter = expandVertically(tween(240)) + fadeIn(tween(180, 45)),
+            exit = shrinkVertically(tween(180)) + fadeOut(tween(120)),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.voice_sound_heading), style = MaterialTheme.typography.headlineSmall)
+                AureCard {
+                    VoiceChoices(R.string.voice_engine, R.string.voice_system_default, engines, settings.selection.engine) {
+                        saveSelection(settings.selection.copy(engine = it, voice = null))
                     }
+                    val languages = listOf(VoiceOption("ru-RU", stringResource(R.string.voice_russian)),
+                        VoiceOption("en-US", stringResource(R.string.voice_english)))
+                    VoiceChoices(R.string.voice_language, R.string.voice_system_default, languages, settings.selection.language) {
+                        saveSelection(settings.selection.copy(language = it, voice = null))
+                    }
+                    VoiceChoices(R.string.voice_actor, R.string.voice_automatic, voices, settings.selection.voice) {
+                        saveSelection(settings.selection.copy(voice = it))
+                    }
+                    VoiceSlider(R.string.voice_rate, settings.rate, 75, 125, 9) { savePercent("rate", it) }
+                    VoiceSlider(R.string.voice_pitch, settings.pitch, 75, 125, 9) { savePercent("pitch", it) }
+                    VoiceSlider(R.string.voice_volume, settings.volume, 10, 100, 8) { savePercent("volume", it) }
                 }
-                SettingsSwitch(R.string.voice_identity_only, settings.identityOnly) {
-                    preferences.edit { putBoolean("identity_only", it) }
-                    settings = settings.copy(identityOnly = it)
+                Text(stringResource(R.string.voice_timing_heading), style = MaterialTheme.typography.headlineSmall)
+                AureCard {
+                    VoiceSlider(R.string.voice_delay, settings.timing.delayMs.toInt(), 350, 4_000, 0) { savePercent("delay_ms", it) }
+                    VoiceSlider(R.string.voice_count, settings.timing.count, 1, 3, 1) { savePercent("count", it) }
+                    if (settings.timing.count > 1) {
+                        VoiceSlider(R.string.voice_interval, settings.timing.intervalMs.toInt(), 2_000, 7_000, 9) {
+                            savePercent("interval_ms", it)
+                        }
+                    }
+                    SettingsSwitch(R.string.voice_identity_only, settings.identityOnly) {
+                        preferences.edit { putBoolean("identity_only", it) }
+                        settings = settings.copy(identityOnly = it)
+                    }
                 }
             }
         }
@@ -113,61 +152,30 @@ internal fun VoicePage(onError: (Int) -> Unit) {
 
 @Composable
 private fun VoiceChoices(
-    @StringRes label: Int,
-    @StringRes defaultOption: Int,
-    options: List<VoiceOption>,
-    selected: String?,
-    onSelect: (String?) -> Unit,
+    @StringRes label: Int, @StringRes defaultOption: Int, options: List<VoiceOption>,
+    selected: String?, onSelect: (String?) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val title = stringResource(label)
     val automatic = stringResource(defaultOption)
-    Column {
-        Text(stringResource(label), style = MaterialTheme.typography.labelLarge)
-        Box {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(options.firstOrNull { it.key == selected }?.label ?: selected ?: automatic,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                DropdownMenuItem(text = { Text(automatic) }, onClick = { expanded = false; onSelect(null) })
-                options.forEach { item ->
-                    DropdownMenuItem(text = { Text(item.label) }, onClick = { expanded = false; onSelect(item.key) })
-                }
-            }
-        }
+    AureOption(title, R.drawable.aure_wave, onClick = { expanded = true },
+        subtitle = options.firstOrNull { it.key == selected }?.label ?: selected ?: automatic)
+    if (expanded) {
+        val choices = listOf(SheetChoice(null, automatic, R.drawable.aure_wave)) +
+            options.map { SheetChoice(it.key, it.label, R.drawable.aure_wave) }
+        AureChoiceSheet(title, selected, choices, { expanded = false }, onSelect)
     }
 }
 
 @Composable
 private fun VoiceSlider(@StringRes label: Int, value: Int, start: Int, end: Int, steps: Int, onCommit: (Int) -> Unit) {
     var current by remember(value) { mutableFloatStateOf(value.toFloat()) }
-    Column {
-        Text(stringResource(label, current.roundToInt()), style = MaterialTheme.typography.labelLarge)
+    val description = stringResource(label, current.roundToInt())
+    Column(Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) {
+        Text(description, style = MaterialTheme.typography.labelLarge)
         Slider(
             value = current, valueRange = start.toFloat()..end.toFloat(), steps = steps,
             onValueChange = { current = it }, onValueChangeFinished = { onCommit(current.roundToInt()) },
-        )
-    }
-}
-
-@Composable
-internal fun RecordingStatusCard() {
-    var details by rememberSaveable { mutableStateOf(false) }
-    OutlinedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(R.string.recording_title), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.recording_unavailable), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextButton(onClick = { details = true }) { Text(stringResource(R.string.recording_why)) }
-        }
-    }
-    if (details) {
-        AlertDialog(
-            onDismissRequest = { details = false },
-            title = { Text(stringResource(R.string.recording_title)) },
-            text = { Text(stringResource(R.string.recording_explain)) },
-            confirmButton = {
-                TextButton(onClick = { details = false }) { Text(stringResource(R.string.close_details)) }
-            },
         )
     }
 }

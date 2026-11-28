@@ -260,7 +260,7 @@ class AureInCallService : InCallService() {
         val open = PendingIntent.getActivity(this, CALL_NOTIFICATION_ID, callScreenIntent(this),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val builder = Notification.Builder(this, if (incoming) incomingChannel else ongoingChannel)
-            .setSmallIcon(android.R.drawable.sym_action_call)
+            .setSmallIcon(R.drawable.aure_notify)
             .setContentTitle(title)
             .setContentText(getString(if (incoming) R.string.incoming_call else R.string.ongoing_call))
             .setCategory(Notification.CATEGORY_CALL)

@@ -102,4 +102,28 @@
 <string name="recording_unavailable">Недоступна в этой сборке</string>
 <string name="recording_why">Почему запись недоступна?</string>
 <string name="recording_explain">Android даёт доступ к звуку обеих сторон разговора только своим системным компонентам. Роль звонилки такого доступа не даёт. Для записи нужна поддержка производителя устройства.</string>
+
+    <string name="back">Назад</string>
+    <string name="clear_search">Очистить поиск</string>
+    <string name="recents_empty">Пока нет звонков</string>
+    <string name="missed_empty">Нет пропущенных</string>
+    <string name="blocked_empty">Нет заблокированных</string>
+    <string name="contacts_empty">Нет контактов с номерами</string>
+    <string name="favorites_empty">Пока нет избранного</string>
+    <string name="search_empty">Ничего не найдено</string>
+    <string name="favorite_contact">Избранный контакт</string>
+    <string name="protection_on">Фильтрация работает</string>
+    <string name="protection_off">Фильтрация выключена</string>
+    <string name="rules_lists">Списки номеров</string>
+    <string name="add_rule">Добавить номер</string>
+    <string name="remove_number">Удалить %1$s</string>
+    <string name="calls_group">Звонки</string>
+    <string name="sound_group">Звук</string>
+    <string name="setup_ready_short">Готово</string>
+    <string name="setup_action_needed">Требуется настройка</string>
+    <string name="identity_title">Контакты и SIM</string>
+    <string name="identity_hint">Разрешения для имён абонентов и подписей SIM</string>
+    <string name="voice_sound_heading">Голос и язык</string>
+    <string name="voice_timing_heading">Задержка и повторы</string>
+    <string name="call_keypad">Клавиатура звонка</string>
 </resources>
