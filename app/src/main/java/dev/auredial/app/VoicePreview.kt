@@ -12,6 +12,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
+import android.os.LocaleList
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.content.ContextCompat
@@ -41,7 +42,9 @@ internal class VoicePreview(
     private val voices = MutableStateFlow<List<VoiceOption>>(emptyList())
     val voiceOptions = voices.asStateFlow()
     private val locale = selection.language?.let(Locale::forLanguageTag) ?: context.resources.configuration.locales[0]
-    private val speechContext = context.createConfigurationContext(Configuration(context.resources.configuration).apply { setLocales(android.os.LocaleList(locale)) })
+    private val speechContext = context.createConfigurationContext(
+        Configuration(context.resources.configuration).apply { setLocales(LocaleList(this@VoicePreview.locale)) },
+    )
     val isReady: Boolean get() = ready && !closed
     val isLoading: Boolean get() = status.value == R.string.voice_loading
     val isSpeaking: Boolean get() = utterance != null

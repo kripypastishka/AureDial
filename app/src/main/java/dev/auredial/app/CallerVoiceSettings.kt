@@ -23,8 +23,13 @@ internal fun VoicePage(onError: (Int) -> Unit) {
     var settings by remember(context) { mutableStateOf(readVoiceSettings(context)) }
     var advanced by rememberSaveable { mutableStateOf(false) }
     var generation by remember { mutableIntStateOf(0) }
-    val player = remember(context, settings.selection, generation) { VoicePreview(context, selection = settings.selection) }
-    DisposableEffect(player) { onDispose { player.close() } }
+    var readyPlayer by remember(context, settings.selection, generation) { mutableStateOf<VoicePreview?>(null) }
+    DisposableEffect(context, settings.selection, generation) {
+        val opened = VoicePreview(context, selection = settings.selection)
+        readyPlayer = opened
+        onDispose { opened.close() }
+    }
+    val player = readyPlayer ?: return
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { player.stop() }
     val status by player.state.collectAsStateWithLifecycle()
     val engines by player.engineOptions.collectAsStateWithLifecycle()
