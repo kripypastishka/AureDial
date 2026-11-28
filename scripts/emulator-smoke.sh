@@ -49,9 +49,9 @@ dump_ui() {
 }
 
 ui_node() {
-    local label=$1 click=${2:-false} coords
+    local label=$1 click=${2:-false} owner=${3:-$package} coords
     dump_ui || return 1
-    coords=$(python3 - "$output/ui.xml" "$label" <<'PYTHON'
+    coords=$(python3 - "$output/ui.xml" "$label" "$owner" <<'PYTHON'
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -63,7 +63,7 @@ except ET.ParseError:
 
 matching = [
     node for node in root.iter("node")
-    if node.get("package") == "dev.auredial.app"
+    if node.get("package") == sys.argv[3]
     and sys.argv[2] in (node.get("text"), node.get("content-desc"))
 ]
 for node in sorted(matching, key=lambda node: node.get("clickable") != "true"):
@@ -113,6 +113,18 @@ voice_called() {
         grep -Fq 'Incoming number reached offline voice' "$output/voice.txt"
 }
 
+capture() {
+    if [[ -n ${AURE_TEST_SCREENSHOTS:-} ]]; then
+        mkdir -p "$AURE_TEST_SCREENSHOTS"
+        adb exec-out screencap -p > "$AURE_TEST_SCREENSHOTS/$1.png"
+    fi
+}
+
+preview_called() {
+    adb logcat -d -s 'AureDialTestVoice:I' > "$output/voice.txt" &&
+        grep -Fq 'Preview reached offline voice' "$output/voice.txt"
+}
+
 install_voice_fixture() {
     local android_jar="$ANDROID_HOME/platforms/android-36/android.jar"
     local tools="$ANDROID_HOME/build-tools/35.0.0"
@@ -143,6 +155,7 @@ adb shell settings put global animator_duration_scale 0
 adb shell am start -W -a android.intent.action.DIAL -d "tel:+1$number" -n "$package/.MainActivity"
 keypad_passed=true
 if retry 30 ui_node "+1$number"; then
+    capture keypad
     echo "PASS: ACTION_DIAL pre-fills the keypad"
 else
     keypad_passed=false
@@ -162,8 +175,17 @@ if call_activity_resumed; then
     exit 1
 fi
 echo "PASS: call notification and offline voice with the call activity closed"
-adb emu gsm cancel "$number"
+adb shell cmd statusbar expand-notifications
+retry 35 ui_node "Answer" true com.android.systemui
+retry 30 call_activity_resumed
+retry 30 ui_node "Call in progress"
+capture connected-from-notification
+retry 30 ui_node "Mute" true
+retry 30 ui_node "Unmute" true
+retry 30 ui_node "Mute"
+retry 30 ui_node "End call" true
 retry 30 call_ended
+echo "PASS: Answer in the system notification opens the connected call UI, controls the microphone and ends the call"
 
 adb shell cmd appops set "$package" USE_FULL_SCREEN_INTENT allow
 adb shell input keyevent KEYCODE_SLEEP
@@ -171,9 +193,7 @@ sleep 1
 adb emu gsm call "$number"
 retry 30 call_activity_resumed
 retry 30 ui_node "Decline"
-if [[ -n ${AURE_TEST_SCREENSHOT:-} ]]; then
-    adb exec-out screencap -p > "$AURE_TEST_SCREENSHOT"
-fi
+capture incoming-locked
 retry 30 ui_node "Decline" true
 retry 30 call_ended
 echo "PASS: a locked screen opens AureDial and Decline rejects the incoming call"
@@ -184,9 +204,46 @@ adb shell am start -W -n "$package/.MainActivity"
 adb emu gsm call "$number"
 retry 30 call_activity_resumed
 retry 35 answer_call
+capture connected
+retry 30 ui_node "Dial" true
+retry 30 ui_node "5" true
+retry 30 ui_node "Close keypad" true
 retry 30 ui_node "End call" true
 retry 30 call_ended
 echo "PASS: Answer connects the call and End call disconnects it"
+
+adb shell am force-stop "$package"
+adb shell am start -W -n "$package/.MainActivity"
+retry 30 ui_node "Recents"
+capture recents
+retry 30 ui_node "Contacts" true
+retry 30 ui_node "All contacts"
+capture contacts
+retry 30 ui_node "Favorites" true
+capture favorites
+retry 30 ui_node "Protection" true
+retry 30 ui_node "Call protection"
+capture protection
+retry 30 ui_node "Settings" true
+retry 30 ui_node "Why is recording unavailable?" true
+retry 30 ui_node "Close" true
+capture settings
+retry 30 ui_node "Play test announcement" true
+retry 30 preview_called
+retry 30 ui_node "Voice settings" true
+adb shell input swipe 515 1800 528 900 360
+retry 30 ui_node "Speech engine"
+capture voice-options
+echo "PASS: navigation, favorites, recording availability and offline voice settings"
+
+
+adb shell cmd uimode night yes
+retry 30 ui_node "Recents" true
+capture recents-dark
+adb shell cmd locale set-app-locales "$package" --user 0 --locales ru-RU
+retry 30 ui_node "Недавние"
+capture recents-ru-dark
+echo "PASS: the Russian app locale and dark theme can be selected"
 
 adb shell logcat -d -b crash > "$output/crashes.txt"
 if grep -Fq "Process: $package," "$output/crashes.txt"; then

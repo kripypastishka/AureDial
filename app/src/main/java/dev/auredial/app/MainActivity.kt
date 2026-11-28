@@ -48,7 +48,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.auredial.domain.Rules
 import dev.auredial.domain.t9Matches
-import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
@@ -62,12 +61,6 @@ import kotlinx.coroutines.withContext
 }
 
 class MainActivity : ComponentActivity() {
-    private val voiceDelegate = lazy(LazyThreadSafetyMode.NONE) { VoicePreview(this) }
-    private val voice by voiceDelegate
-
-    private fun stopPreview() {
-        if (voiceDelegate.isInitialized()) voice.stop()
-    }
     private val screening=mutableStateOf(false)
     private val dialer=mutableStateOf(false)
     private val revision=mutableIntStateOf(0)
@@ -214,7 +207,7 @@ class MainActivity : ComponentActivity() {
                                 destinations.forEachIndexed { index, (label, icon) ->
                                     NavigationBarItem(
                                         selected = tab == index,
-                                        onClick = { stopPreview(); tab = index },
+                                        onClick = { tab = index },
                                         icon = { Icon(painterResource(icon), null) },
                                         label = { Text(stringResource(label), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                     )
@@ -272,7 +265,8 @@ class MainActivity : ComponentActivity() {
                                 TextButton(onClick = { permissions.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.READ_PHONE_STATE)) }) {
                                     Text(stringResource(R.string.call_identity_permissions))
                                 }
-                                VoicePage(voice, onError = ::error)
+                                RecordingStatusCard()
+                                VoicePage(onError = ::error)
                             }
                         }
                     }
@@ -289,8 +283,6 @@ class MainActivity : ComponentActivity() {
     }
     override fun onNewIntent(intent:Intent){super.onNewIntent(intent);setIntent(intent);handleIntent(intent)}
     override fun onResume(){super.onResume();refresh()}
-    override fun onStop(){stopPreview();super.onStop()}
-    override fun onDestroy(){if (voiceDelegate.isInitialized()) voice.close();super.onDestroy()}
 }
 
 @Composable private fun PeoplePage(tab:Int,revision:Int,dialer:Boolean,request:()->Unit,onDetails:(PhoneRow)->Unit){
@@ -465,7 +457,7 @@ private fun String.toDialInput(): String = buildString {
     } }
 }
 @Composable
-private fun SettingsSwitch(@StringRes label: Int, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+internal fun SettingsSwitch(@StringRes label: Int, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         val description = stringResource(label)
         Text(description, Modifier.weight(1f))
@@ -547,47 +539,4 @@ private fun NumberDetails(row: PhoneRow, store: RuleStore, onDismiss: () -> Unit
             }
         },
     )
-}
-
-@Composable
-private fun VoicePage(voice: VoicePreview, onError: (Int) -> Unit) {
-    val context = LocalContext.current
-    val preferences = remember(context) { voicePreferences(context) }
-    var settings by remember(context) { mutableStateOf(readVoiceSettings(context)) }
-    var rate by remember(settings.rate) { mutableFloatStateOf(settings.rate.toFloat()) }
-    val status by voice.state.collectAsStateWithLifecycle()
-    Text(stringResource(R.string.voice_title), style = MaterialTheme.typography.headlineSmall)
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SettingsSwitch(R.string.announce_enabled, settings.enabled) {
-                preferences.edit { putBoolean("announce", it) }
-                settings = settings.copy(enabled = it)
-            }
-            SettingsSwitch(R.string.contacts_only, settings.contactsOnly, settings.enabled) {
-                preferences.edit { putBoolean("contacts_only", it) }
-                settings = settings.copy(contactsOnly = it)
-            }
-            Text(stringResource(R.string.announce_limit), style = MaterialTheme.typography.bodySmall)
-            Text(stringResource(R.string.voice_rate, rate.roundToInt()))
-            Slider(value = rate, valueRange = 75f..125f, steps = 9, onValueChange = { rate = it },
-                onValueChangeFinished = {
-                    val chosen = rate.roundToInt()
-                    preferences.edit { putInt("rate", chosen) }
-                    settings = settings.copy(rate = chosen)
-                })
-            Text(stringResource(status), style = MaterialTheme.typography.bodyMedium)
-            if (status == R.string.voice_unavailable) {
-                OutlinedButton(onClick = { if (!voice.openVoiceInstaller()) onError(R.string.open_tts_manually) }) {
-                    Text(stringResource(R.string.install_voice))
-                }
-            }
-
-            if (status == R.string.voice_playing) {
-                OutlinedButton(onClick = voice::stop, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.stop)) }
-            } else {
-                Button(onClick = voice::play, enabled = status != R.string.voice_loading && status != R.string.voice_unavailable,
-                    modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.preview)) }
-            }
-        }
-    }
 }

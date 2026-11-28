@@ -43,8 +43,11 @@ public final class SmokeVoiceService extends TextToSpeechService {
     @Override protected void onStop() {}
 
     @Override protected void onSynthesizeText(SynthesisRequest request, SynthesisCallback callback) {
-        if (request.getCharSequenceText().toString().contains("2 0 2 5 5 5 0 1 2 3")) {
+        String text = request.getCharSequenceText().toString();
+        if (text.contains("2 0 2 5 5 5 0 1 2 3")) {
             Log.i("AureDialTestVoice", "Incoming number reached offline voice");
+        } else if (text.contains("Alex")) {
+            Log.i("AureDialTestVoice", "Preview reached offline voice");
         }
         // Silent PCM keeps the automated test independent of the emulator's audio device.
         if (callback.start(16_000, AudioFormat.ENCODING_PCM_16BIT, 1) == TextToSpeech.SUCCESS) {

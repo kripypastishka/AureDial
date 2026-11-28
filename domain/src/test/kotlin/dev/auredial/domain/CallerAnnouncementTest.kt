@@ -48,4 +48,29 @@ class CallerAnnouncementTest {
         assertNull(speakerIdentity(null, "+7 (999) 12", true))
         assertNull(speakerIdentity(null, null, false))
     }
+    @Test
+    fun respectsTheDelayAndRepeatsWithoutInterruptingAnUtterance() {
+        val session = AnnouncementSession()
+        val timing = AnnouncementTiming(delayMs = 2_000, count = 2, intervalMs = 4_000)
+        assertEquals(AnnouncementAction.WAIT, session.update("call", true, true, 0, timing))
+        assertEquals(AnnouncementAction.WAIT, session.update("call", true, true, 1_999, timing))
+        assertEquals(AnnouncementAction.SPEAK, session.update("call", true, true, 2_000, timing))
+        assertEquals(AnnouncementAction.WAIT, session.update("call", true, false, 6_000, timing))
+        assertEquals(AnnouncementAction.SPEAK, session.update("call", true, true, 6_001, timing))
+        assertEquals(AnnouncementAction.KEEP, session.update("call", true, true, 11_000, timing))
+    }
+
+    @Test
+    fun answeringPreventsARepeatAndOldRingingCallsExpire() {
+        val timing = AnnouncementTiming(count = 3)
+        val session = AnnouncementSession()
+        session.update("call", true, true, 0, timing)
+        session.update("call", true, true, 400, timing)
+        session.suppress("call")
+        assertEquals(AnnouncementAction.STOP, session.update("call", true, true, 4_000, timing))
+        session.update("next", true, true, 5_000, timing)
+        session.update("next", true, true, 5_400, timing)
+        assertEquals(AnnouncementAction.KEEP, session.update("next", true, true, 29_000, timing))
+    }
+
 }
