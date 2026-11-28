@@ -18,7 +18,7 @@ retry() {
     shift
     until "$@"; do
         if (( SECONDS >= deadline )); then
-            printf 'Timed out after %ss waiting for %s\n' "$timeout_seconds" "$1" >&2
+            printf 'Timed out after %ss waiting for %s\n' "$timeout_seconds" "$*" >&2
             adb shell cmd notification list >&2 || true
             adb shell dumpsys activity activities | sed -n '/ResumedActivity/p' >&2 || true
             if [[ -s "$output/ui.xml" ]]; then
@@ -173,7 +173,9 @@ if retry 30 ui_node "+1$number"; then
     retry 25 ui_node "+1${number}5"
     retry 25 ui_node "Delete digit" true
     retry 25 ui_node "+1$number"
-    echo "PASS: ACTION_DIAL pre-fills the keypad, and digit entry and deletion update it"
+    adb shell am start -W -a android.intent.action.DIAL -d "tel:+12025550199" -n "$package/.MainActivity"
+    retry 25 ui_node "+12025550199"
+    echo "PASS: a cold launch and a second ACTION_DIAL pre-fill the keypad, and digit entry and deletion update it"
 else
     keypad_passed=false
 fi
@@ -299,7 +301,9 @@ retry 30 ui_node "Why is recording unavailable?" true
 retry 30 ui_node "Close"
 capture recording
 retry 30 ui_node "Close" true
+retry 30 ui_node "Why is recording unavailable?"
 adb shell input keyevent KEYCODE_BACK
+retry 30 ui_node "Settings"
 retry 30 ui_node "Caller announcement" true
 retry 30 ui_node "Play test announcement" true
 retry 30 preview_called
@@ -311,7 +315,9 @@ retry 30 ui_node "Speech engine" true
 retry 30 ui_node "System default"
 capture voice-selection
 adb shell input keyevent KEYCODE_BACK
+retry 30 ui_scroll_to "Speech rate · 100%"
 adb shell input keyevent KEYCODE_BACK
+retry 30 ui_node "Settings"
 echo "PASS: call setup, recording information, voice playback and engine picker"
 
 adb shell cmd uimode night yes
@@ -326,6 +332,17 @@ retry 30 ui_node "Контакты" true
 retry 30 ui_node "Все контакты"
 capture contacts-ru-large
 echo "PASS: the Russian app locale, dark theme and larger text"
+
+adb emu gsm call "$number"
+retry 30 call_activity_resumed
+retry 30 ui_node "Входящий звонок"
+capture incoming-ru
+retry 30 ui_node "Принять" true
+retry 30 ui_node "Разговор"
+capture connected-ru
+retry 30 ui_node "Завершить" true
+retry 30 call_ended
+echo "PASS: a Russian incoming call can be answered and ended with large text and motion enabled"
 
 adb shell logcat -d -b crash > "$output/crashes.txt"
 if grep -Fq "Process: $package," "$output/crashes.txt"; then

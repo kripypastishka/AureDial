@@ -52,7 +52,8 @@ class MainActivity : ComponentActivity() {
     private val screening=mutableStateOf(false)
     private val dialer=mutableStateOf(false)
     private val revision=mutableIntStateOf(0)
-    private val externalNumber=mutableStateOf<String?>(null)
+    private class DialRequest(val number: String)
+    private var externalDial by mutableStateOf<DialRequest?>(null)
     private val roleRequest=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){refresh()}
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh() }
     private val setupNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
@@ -112,7 +113,8 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent:Intent) {
         if (intent.action == Intent.ACTION_DIAL) {
-            externalNumber.value = intent.data?.takeIf { it.scheme == "tel" }?.schemeSpecificPart?.take(64) ?: ""
+            val number = intent.data?.takeIf { it.scheme == "tel" }?.schemeSpecificPart?.take(64).orEmpty()
+            externalDial = DialRequest(number)
         }
     }
     private fun requestRole(role:String) {
@@ -163,7 +165,7 @@ class MainActivity : ComponentActivity() {
                     revision = revision.intValue,
                     setup = callSetup,
                     inCall = callUi.calls.isNotEmpty(),
-                    externalNumber = externalNumber.value,
+                    dialRequest = externalDial,
                 )
             }
         }
@@ -172,11 +174,12 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun Home(
         store: RuleStore, defaultPhone: Boolean, screening: Boolean, revision: Int,
-        setup: CallSetup, inCall: Boolean, externalNumber: String?,
+        setup: CallSetup, inCall: Boolean, dialRequest: DialRequest?,
     ) {
         var tab by rememberSaveable { mutableStateOf(HomePage.RECENTS) }
-        var subpage by rememberSaveable { mutableStateOf<HomePage?>(null) }
-        var dialNumber by rememberSaveable { mutableStateOf("") }
+        var subpage by rememberSaveable { mutableStateOf(dialRequest?.let { HomePage.DIAL }) }
+        var dialNumber by rememberSaveable { mutableStateOf(dialRequest?.number.orEmpty()) }
+        var lastDialRequest by remember { mutableStateOf(dialRequest) }
         var dialSession by rememberSaveable { mutableIntStateOf(0) }
         var details by remember { mutableStateOf<PhoneRow?>(null) }
         val page = subpage ?: tab
@@ -192,10 +195,11 @@ class MainActivity : ComponentActivity() {
         }
 
         BackHandler(enabled = subpage != null, onBack = back)
-        LaunchedEffect(externalNumber) {
-            if (externalNumber != null) {
-                openDial(externalNumber)
-                this@MainActivity.externalNumber.value = null
+        LaunchedEffect(dialRequest) {
+            if (dialRequest != null && lastDialRequest !== dialRequest) {
+                lastDialRequest = dialRequest
+                details = null
+                openDial(dialRequest.number)
             }
         }
         Scaffold(
