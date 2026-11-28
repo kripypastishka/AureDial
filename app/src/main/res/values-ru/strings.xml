@@ -7,8 +7,7 @@
 <string name="role_missing">Роль фильтрации не предоставлена</string><string name="role_granted">Роль фильтрации предоставлена</string><string name="request_role">Предоставить роль фильтрации</string>
 <string name="enable_rules">Фильтровать звонки</string><string name="international_number">Номер телефона (желательно с + и кодом страны)</string><string name="allow">Разрешить</string><string name="block">Блокировать</string><string name="remove">Удалить</string><string name="allow_list">Белый список</string><string name="block_list">Черный список</string><string name="empty_list">Нет записей</string>
 <string name="invalid_number">Введи полный номер с + и кодом страны.</string><string name="save_error">Не удалось сохранить настройки.</string><string name="action_failed">Системное действие недоступно.</string>
-<string name="voice_title">Диктор абонента</string><string name="preview">Прослушать объявление</string><string name="stop">Остановить</string><string name="preview_text">Входящий звонок. Проверка голоса.</string>
-<string name="voice_loading">Подготовка голоса</string><string name="voice_ready">Голос готов</string><string name="voice_playing">Воспроизведение</string><string name="voice_unavailable">Нет подходящего офлайн-голоса или TTS недоступен</string><string name="voice_silent">Беззвучный режим или «Не беспокоить»</string><string name="voice_focus_denied">Аудиофокус недоступен</string><string name="voice_error">Ошибка воспроизведения</string>
+<string name="voice_title">Диктор абонента</string><string name="preview">Прослушать объявление</string><string name="stop">Остановить</string><string name="voice_loading">Подготовка голоса</string><string name="voice_ready">Голос готов</string><string name="voice_playing">Воспроизведение</string><string name="voice_unavailable">Нет подходящего офлайн-голоса или TTS недоступен</string><string name="voice_silent">Беззвучный режим или «Не беспокоить»</string><string name="voice_focus_denied">Аудиофокус недоступен</string><string name="voice_error">Ошибка воспроизведения</string>
 <string name="recents">Недавние</string>
 <string name="contacts">Контакты</string>
 <string name="favorites">Избранное</string>
@@ -81,4 +80,26 @@
 <string name="all_contacts">Все контакты</string>
 <string name="install_voice">Установить офлайн-голос</string>
 <string name="open_tts_manually">Открой настройки синтеза речи Android и установи голос для своего языка.</string>
+<string name="call_ending">Завершение звонка</string>
+<string name="preview_identity">Александр</string>
+<string name="voice_reload">Обновить список голосов</string>
+<string name="voice_more_settings">Настройки голоса</string>
+<string name="voice_fewer_settings">Скрыть настройки голоса</string>
+<string name="voice_engine">Движок синтеза речи</string>
+<string name="voice_system_default">Системный</string>
+<string name="voice_language">Язык речи</string>
+<string name="voice_russian">Русский</string>
+<string name="voice_english">Английский</string>
+<string name="voice_actor">Офлайн-голос</string>
+<string name="voice_automatic">Автоматически</string>
+<string name="voice_pitch">Высота голоса · %1$d%%</string>
+<string name="voice_volume">Громкость диктора · %1$d%%</string>
+<string name="voice_delay">Задержка · %1$d мс</string>
+<string name="voice_count">Количество озвучиваний · %1$d</string>
+<string name="voice_interval">Интервал · %1$d мс</string>
+<string name="voice_identity_only">Произносить только имя или номер</string>
+<string name="recording_title">Запись звонков</string>
+<string name="recording_unavailable">Недоступна в этой сборке</string>
+<string name="recording_why">Почему запись недоступна?</string>
+<string name="recording_explain">Android даёт доступ к звуку обеих сторон разговора только своим системным компонентам. Роль звонилки такого доступа не даёт. Для записи нужна поддержка производителя устройства.</string>
 </resources>

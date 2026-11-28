@@ -25,11 +25,16 @@ jobs:
         run: |
           report=app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
           if [ -f "$report" ]; then cat "$report"; fi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: auredial-debug
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+      - name: Verify the signed APK and its permissions
+        run: |
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          "$tools/apksigner" verify "$apk"
+          "$tools/aapt" dump permissions "$apk" > "$RUNNER_TEMP/apk-permissions.txt"
+          if grep -Eq "android.permission.(CAPTURE_AUDIO_OUTPUT|RECORD_AUDIO|INTERNET|MANAGE_OWN_CALLS)'$" "$RUNNER_TEMP/apk-permissions.txt"; then
+            cat "$RUNNER_TEMP/apk-permissions.txt"
+            exit 1
+          fi
 
       - name: Check Telecom on Android 15 emulator
         if: github.event_name != 'push' || github.ref == 'refs/heads/main'
@@ -49,16 +54,22 @@ jobs:
           emulator_pid=$!
           trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
           sleep 2
-          export AURE_TEST_SCREENSHOT="$RUNNER_TEMP/incoming-call.png"
+          export AURE_TEST_SCREENSHOTS="$RUNNER_TEMP/auredial-screens"
           if ! kill -0 "$emulator_pid" || ! bash scripts/emulator-smoke.sh; then
             cat "$RUNNER_TEMP/emulator.log"
             exit 1
           fi
 
-      - name: Save the emulator call screen
+      - name: Save emulator screenshots
         if: always() && (github.event_name != 'push' || github.ref == 'refs/heads/main')
         uses: actions/upload-artifact@v4
         with:
-          name: incoming-call-screen
-          path: ${{ runner.temp }}/incoming-call.png
+          name: auredial-screens
+          path: ${{ runner.temp }}/auredial-screens/*.png
           if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: auredial-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

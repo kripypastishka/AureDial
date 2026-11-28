@@ -235,6 +235,15 @@ class AureInCallService : InCallService() {
         Intent(this,CallActionReceiver::class.java).setData("auredial://call/$id/$command".toUri())
             .putExtra("call",id).putExtra("command",command),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    private fun answerAndOpenCall(id: String): PendingIntent = PendingIntent.getActivity(
+        this, CALL_NOTIFICATION_ID,
+        callScreenIntent(this)
+            .setAction(ACTION_ANSWER_CALL)
+            .setData("auredial://call/$id/answer".toUri())
+            .putExtra(EXTRA_ANSWER_CALL_ID, id),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
     private fun updateNotification() {
         val manager = getSystemService(NotificationManager::class.java)
         val entry = primary()
@@ -261,11 +270,11 @@ class AureInCallService : InCallService() {
             .setOnlyAlertOnce(!newIncoming)
         if (Build.VERSION.SDK_INT >= 31) {
             val person = Person.Builder().setName(title).build()
-            builder.setStyle(if (incoming) Notification.CallStyle.forIncomingCall(person, pending(call.id, "reject"), pending(call.id, "answer"))
+            builder.setStyle(if (incoming) Notification.CallStyle.forIncomingCall(person, pending(call.id, "reject"), answerAndOpenCall(call.id))
                 else Notification.CallStyle.forOngoingCall(person, pending(call.id, "end")))
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         } else {
-            if (incoming) builder.addAction(Notification.Action.Builder(null, getString(R.string.answer), pending(call.id, "answer")).build())
+            if (incoming) builder.addAction(Notification.Action.Builder(null, getString(R.string.answer), answerAndOpenCall(call.id)).build())
             val label = if (incoming) R.string.reject else R.string.end_call
             builder.addAction(Notification.Action.Builder(null, getString(label), pending(call.id, if (incoming) "reject" else "end")).build())
         }
@@ -305,25 +314,31 @@ class AureInCallService : InCallService() {
         val entry = currentRinging()
         if (ringingVoiceId != entry?.id) {
             stopVoice()
+            announcement?.resetCall()
             ringingVoiceId = entry?.id
         }
         val settings = readVoiceSettings(this)
         val silenced = entry?.call?.details?.extras?.getBoolean(Call.EXTRA_SILENT_RINGING_REQUESTED) == true
         val eligible = entry != null && live().size == 1 && settings.enabled && !silenced
         val player = if (eligible) {
-            announcement ?: VoicePreview(this, incomingCall = true).also { announcement = it }
+            val existing = announcement
+            if (existing != null && existing.selection == settings.selection) existing else {
+                existing?.close()
+                VoicePreview(this, incomingCall = true, selection = settings.selection).also { announcement = it }
+            }
         } else announcement
         val identity = entry?.let {
             speakerIdentity(contactName(it), presentedNumber(it.call.details), settings.contactsOnly)
-                ?: getString(R.string.unknown_caller).takeUnless { settings.contactsOnly }
+                ?: player?.unknownCaller()?.takeUnless { settings.contactsOnly }
         }
-        when (voiceSession.update(entry?.id, eligible, player?.isReady == true && identity != null, SystemClock.elapsedRealtime())) {
+        val ready = player != null && player.canAnnounce && player.isReady && !player.isSpeaking && identity != null
+        when (voiceSession.update(entry?.id, eligible, ready, SystemClock.elapsedRealtime(), settings.timing)) {
             AnnouncementAction.STOP -> stopVoice()
-            AnnouncementAction.WAIT -> if (player != null && (player.isLoading || player.isReady)) {
-                main.postDelayed(retryVoice, 100L)
+            AnnouncementAction.WAIT -> if (player != null && (player.isLoading || player.canAnnounce)) {
+                main.postDelayed(retryVoice, 125L)
             }
-            AnnouncementAction.SPEAK -> if (identity != null) {
-                player?.playAnnouncement(getString(R.string.announce_caller, identity))
+            AnnouncementAction.SPEAK -> if (identity != null && player?.playAnnouncement(identity, settings) == true) {
+                if (settings.timing.count > 1) main.postDelayed(retryVoice, settings.timing.intervalMs)
             }
             AnnouncementAction.KEEP -> Unit
         }
@@ -394,6 +409,8 @@ class AureInCallService : InCallService() {
     }
 }
 
+internal const val ACTION_ANSWER_CALL = "dev.auredial.app.action.ANSWER_CALL"
+internal const val EXTRA_ANSWER_CALL_ID = "answer_call_id"
 internal const val CALL_NOTIFICATION_ID = 72
 internal const val INCOMING_CALL_CHANNEL = "incoming_v2"
 

@@ -5,20 +5,29 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
+import android.os.Bundle
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
+import android.os.LocaleList
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.content.ContextCompat
+import dev.auredial.domain.AnnouncementTiming
+import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** Main-thread-only offline speech used by the settings preview and the in-call service. */
-class VoicePreview(private val context: Context, private val incomingCall: Boolean = false) {
+internal class VoicePreview(
+    private val context: Context,
+    private val incomingCall: Boolean = false,
+    val selection: VoiceSelection = readVoiceSettings(context).selection,
+) {
     private val main = Handler(Looper.getMainLooper())
     private val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val notifications = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -28,8 +37,18 @@ class VoicePreview(private val context: Context, private val incomingCall: Boole
         .build()
     private val status = MutableStateFlow(R.string.voice_loading)
     val state = status.asStateFlow()
+    private val engines = MutableStateFlow<List<VoiceOption>>(emptyList())
+    val engineOptions = engines.asStateFlow()
+    private val voices = MutableStateFlow<List<VoiceOption>>(emptyList())
+    val voiceOptions = voices.asStateFlow()
+    private val locale = selection.language?.let(Locale::forLanguageTag) ?: context.resources.configuration.locales[0]
+    private val speechContext = context.createConfigurationContext(
+        Configuration(context.resources.configuration).apply { setLocales(LocaleList(this@VoicePreview.locale)) },
+    )
     val isReady: Boolean get() = ready && !closed
     val isLoading: Boolean get() = status.value == R.string.voice_loading
+    val isSpeaking: Boolean get() = utterance != null
+    val canAnnounce: Boolean get() = status.value == R.string.voice_ready || status.value == R.string.voice_playing
     private var engine: TextToSpeech? = null
     private var ready = false
     private var closed = false
@@ -45,26 +64,40 @@ class VoicePreview(private val context: Context, private val incomingCall: Boole
     }
     private val timeout = Runnable { finish(R.string.voice_error) }
 
+    private val initTimeout = Runnable {
+        if (isLoading) status.value = R.string.voice_unavailable
+    }
+
     init {
-        engine = TextToSpeech(context.applicationContext) { result ->
+        engine = TextToSpeech(context.applicationContext, { result ->
             main.post {
                 if (!closed) initialize(result)
             }
-        }
+        }, selection.engine)
+        main.postDelayed(initTimeout, 8_000L)
     }
+
     private fun initialize(result: Int) {
+        main.removeCallbacks(initTimeout)
         val tts = engine
-        if (result != TextToSpeech.SUCCESS || tts == null) {
+        if (tts == null) {
             status.value = R.string.voice_unavailable
             return
         }
-        val locale = context.resources.configuration.locales[0]
+        engines.value = runCatching { tts.engines.orEmpty().map { VoiceOption(it.name, it.label ?: it.name) } }
+            .getOrDefault(emptyList())
+        if (result != TextToSpeech.SUCCESS || (selection.engine != null && engines.value.none { it.key == selection.engine })) {
+            status.value = R.string.voice_unavailable
+            return
+        }
         ready = runCatching {
-            val voice = tts.voices.orEmpty().filter {
+            val available = tts.voices.orEmpty().filter {
                 !it.isNetworkConnectionRequired && it.locale.language == locale.language &&
                     TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in it.features.orEmpty()
             }.sortedWith(compareByDescending<android.speech.tts.Voice> { it.locale == locale }
-                .thenByDescending { it.quality }.thenBy { it.name }).firstOrNull()
+                .thenByDescending { it.quality }.thenBy { it.name })
+            voices.value = available.map { VoiceOption(it.name, it.name) }
+            val voice = if (selection.voice == null) available.firstOrNull() else available.firstOrNull { it.name == selection.voice }
             voice != null && tts.setVoice(voice) == TextToSpeech.SUCCESS &&
                 tts.setAudioAttributes(attributes) == TextToSpeech.SUCCESS &&
                 tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -96,18 +129,29 @@ class VoicePreview(private val context: Context, private val incomingCall: Boole
         observingAudio = true
     }.isSuccess
 
-    fun play() { playText(context.getString(R.string.preview_text)) }
+    fun play(settings: VoiceSettings = readVoiceSettings(context)) {
+        playAnnouncement(
+            speechContext.getString(R.string.preview_identity),
+            settings,
+        )
+    }
+
+    fun unknownCaller(): String = speechContext.getString(R.string.unknown_caller)
 
     fun openVoiceInstaller(): Boolean = runCatching {
         val intent = Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA).apply {
-            engine?.defaultEngine?.let(::setPackage)
+            (selection.engine ?: engine?.defaultEngine)?.let(::setPackage)
         }
         context.startActivity(intent)
     }.isSuccess
 
-    fun playAnnouncement(text: String): Boolean = playText(text)
+    fun playAnnouncement(identity: String, settings: VoiceSettings): Boolean {
+        val text = if (settings.identityOnly || locale.language !in setOf("ru", "en")) identity
+            else speechContext.getString(R.string.announce_caller, identity)
+        return playText(text, settings)
+    }
 
-    private fun playText(text: String): Boolean {
+    private fun playText(text: String, settings: VoiceSettings): Boolean {
         if (closed || !ready) return false
         if (utterance != null) finish(R.string.voice_ready)
         if (!systemAllowsSpeech()) {
@@ -143,8 +187,10 @@ class VoicePreview(private val context: Context, private val incomingCall: Boole
         status.value = R.string.voice_playing
         val success = runCatching {
             val tts = engine ?: return@runCatching false
-            tts.setSpeechRate(readVoiceSettings(context).rate / 100f) == TextToSpeech.SUCCESS &&
-                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) == TextToSpeech.SUCCESS
+            val audioParams = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, settings.volume / 100f) }
+            tts.setSpeechRate(settings.rate / 100f) == TextToSpeech.SUCCESS &&
+                tts.setPitch(settings.pitch / 100f) == TextToSpeech.SUCCESS &&
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, audioParams, id) == TextToSpeech.SUCCESS
         }.getOrDefault(false)
         if (success) main.postDelayed(timeout, 10000L) else finish(R.string.voice_error)
         return success
@@ -164,16 +210,35 @@ class VoicePreview(private val context: Context, private val incomingCall: Boole
     fun stop() {
         if (!closed && utterance != null) finish(R.string.voice_ready)
     }
+    fun resetCall() {
+        stop()
+        if (isReady) status.value = R.string.voice_ready
+    }
+
     fun close() {
         if (closed) return
         stop()
+        main.removeCallbacks(initTimeout)
         closed = true
         runCatching { engine?.shutdown() }
         engine = null
     }
 }
 
-internal data class VoiceSettings(val enabled: Boolean, val contactsOnly: Boolean, val rate: Int)
+internal data class VoiceOption(val key: String, val label: String)
+
+internal data class VoiceSelection(val engine: String?, val language: String?, val voice: String?)
+
+internal data class VoiceSettings(
+    val enabled: Boolean,
+    val contactsOnly: Boolean,
+    val rate: Int,
+    val pitch: Int,
+    val volume: Int,
+    val timing: AnnouncementTiming,
+    val identityOnly: Boolean,
+    val selection: VoiceSelection,
+)
 
 internal fun voicePreferences(context: Context) = context.getSharedPreferences("voice", Context.MODE_PRIVATE)
 
@@ -182,5 +247,14 @@ internal fun readVoiceSettings(context: Context): VoiceSettings = voicePreferenc
         enabled = it.getBoolean("announce", true),
         contactsOnly = it.getBoolean("contacts_only", false),
         rate = it.getInt("rate", 100).coerceIn(75, 125),
+        pitch = it.getInt("pitch", 100).coerceIn(75, 125),
+        volume = it.getInt("volume", 100).coerceIn(10, 100),
+        timing = AnnouncementTiming(
+            delayMs = it.getInt("delay_ms", 350).coerceIn(350, 4_000).toLong(),
+            count = it.getInt("count", 1).coerceIn(1, 3),
+            intervalMs = it.getInt("interval_ms", 3_500).coerceIn(2_000, 7_000).toLong(),
+        ),
+        identityOnly = it.getBoolean("identity_only", false),
+        selection = VoiceSelection(it.getString("engine", null), it.getString("voice_language", null), it.getString("voice_name", null)),
     )
 }
