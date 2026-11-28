@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.auredial.testvoice">
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
     <application android:label="AureDial CI voice">
+        <activity android:name=".SeedContactsActivity" android:exported="true" />
         <service android:name=".SmokeVoiceService" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.TTS_SERVICE" />

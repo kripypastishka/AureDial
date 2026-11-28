@@ -103,4 +103,28 @@
 <string name="recording_unavailable">Unavailable in this APK</string>
 <string name="recording_why">Why is recording unavailable?</string>
 <string name="recording_explain">Android reserves access to both sides of a phone call for system components. The default phone app role does not grant that access. Recording requires support from your device manufacturer.</string>
+
+    <string name="back">Back</string>
+    <string name="clear_search">Clear search</string>
+    <string name="recents_empty">No recent calls</string>
+    <string name="missed_empty">No missed calls</string>
+    <string name="blocked_empty">No blocked calls</string>
+    <string name="contacts_empty">No contacts with numbers</string>
+    <string name="favorites_empty">No favorite contacts</string>
+    <string name="search_empty">No results</string>
+    <string name="favorite_contact">Favorite contact</string>
+    <string name="protection_on">Filtering active</string>
+    <string name="protection_off">Filtering off</string>
+    <string name="rules_lists">Number lists</string>
+    <string name="add_rule">Add a number</string>
+    <string name="remove_number">Remove %1$s</string>
+    <string name="calls_group">Calls</string>
+    <string name="sound_group">Sound</string>
+    <string name="setup_ready_short">Ready</string>
+    <string name="setup_action_needed">Setup needed</string>
+    <string name="identity_title">Contacts and SIM</string>
+    <string name="identity_hint">Permissions for caller names and SIM labels</string>
+    <string name="voice_sound_heading">Voice and language</string>
+    <string name="voice_timing_heading">Timing and repeats</string>
+    <string name="call_keypad">Call keypad</string>
 </resources>

@@ -5,24 +5,35 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.telecom.Call
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
+import androidx.annotation.DrawableRes
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -34,13 +45,16 @@ class CallActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         setShowWhenLocked(true)
         setTurnScreenOn(true)
         showKeypad = savedInstanceState?.getBoolean("keypad") ?: intent.getBooleanExtra("dialpad", false)
         if (savedInstanceState == null) answerFromNotification(intent)
         setContent {
-            AureTheme {
+            AureTheme(onCall = true) {
                 val ui by CallRuntime.state.collectAsStateWithLifecycle()
                 LaunchedEffect(ui.calls.isEmpty()) {
                     if (ui.calls.isEmpty()) {
@@ -48,16 +62,9 @@ class CallActivity : ComponentActivity() {
                         if (CallRuntime.state.value.calls.isEmpty()) finish()
                     }
                 }
-                Surface(Modifier.fillMaxSize()) {
-                    val incoming = ui.calls.firstOrNull { isIncomingRinging(it.state) }
-                    val primary = ui.calls.firstOrNull { it.state == Call.STATE_ACTIVE } ?: ui.calls.firstOrNull()
-                    if (incoming != null) {
-                        IncomingCallScreen(incoming, ui.calls.firstOrNull { it.id != incoming.id })
-                    } else if (primary != null) {
-                        OngoingCallScreen(primary, ui, showKeypad, { showKeypad = !showKeypad }) {
-                            startActivity(Intent(Intent.ACTION_DIAL).setClass(this, MainActivity::class.java))
-                        }
-                    }
+                BackHandler(enabled = showKeypad) { showKeypad = false }
+                CallPresentation(ui, showKeypad, { showKeypad = !showKeypad }) {
+                    startActivity(Intent(Intent.ACTION_DIAL).setClass(this, MainActivity::class.java))
                 }
             }
         }
@@ -85,17 +92,33 @@ class CallActivity : ComponentActivity() {
 }
 
 @Composable
-private fun OngoingCallScreen(
-    call: CallView,
-    ui: CallUi,
-    keypad: Boolean,
-    toggleKeypad: () -> Unit,
-    onAdd: () -> Unit,
-) {
+private fun CallPresentation(ui: CallUi, keypad: Boolean, toggleKeypad: () -> Unit, addCall: () -> Unit) {
+    val incoming = ui.calls.firstOrNull { isIncomingRinging(it.state) }
+    val primary = ui.calls.firstOrNull { it.state == Call.STATE_ACTIVE } ?: ui.calls.firstOrNull()
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        if (primary == null) return@Surface
+        AnimatedContent(
+            incoming != null, transitionSpec = {
+                (fadeIn(tween(220)) + scaleIn(tween(235), initialScale = 0.985f))
+                    .togetherWith(fadeOut(tween(130)))
+            },
+            label = "Call connection",
+        ) { ringing ->
+            if (ringing) {
+                val call = incoming ?: primary
+                IncomingCallScreen(call, ui.calls.firstOrNull { it.id != call.id })
+            } else {
+                OngoingCallScreen(primary, ui, keypad, toggleKeypad, addCall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun OngoingCallScreen(call: CallView, ui: CallUi, keypad: Boolean, toggleKeypad: () -> Unit, addCall: () -> Unit) {
     val active = call.state == Call.STATE_ACTIVE
     val holding = call.state == Call.STATE_HOLDING
-    val colors = MaterialTheme.colorScheme
-    val title = call.name ?: call.number ?: stringResource(R.string.unknown_caller)
+    val chooseSim = call.state == Call.STATE_SELECT_PHONE_ACCOUNT
     val stateLabel = when (call.state) {
         Call.STATE_ACTIVE -> R.string.ongoing_call
         Call.STATE_HOLDING -> R.string.hold
@@ -104,54 +127,110 @@ private fun OngoingCallScreen(
         else -> R.string.outgoing_call
     }
 
-    Surface(color = colors.background, modifier = Modifier.fillMaxSize()) {
+    CallFrame { compact ->
+        val scroll = rememberScrollState()
+        LaunchedEffect(call.id, keypad, compact) {
+            if (keypad && compact) {
+                withFrameNanos { }
+                scroll.scrollTo(scroll.maxValue)
+            }
+        }
         Column(
-            Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).padding(bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(
-                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(stringResource(stateLabel), style = MaterialTheme.typography.titleSmall, color = colors.primary)
-                Surface(Modifier.size(76.dp), shape = CircleShape, color = colors.primaryContainer) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(painterResource(R.drawable.aure_person), null, Modifier.size(36.dp), tint = colors.onPrimaryContainer)
+            CallStatusBar(stringResource(stateLabel), active || holding, call)
+            CallIdentity(call, ringing = false)
+            ui.calls.filter { it.id != call.id }.forEach { SecondaryCall(it) }
+            if (chooseSim) {
+                AureCard {
+                    if (call.accounts.isEmpty()) {
+                        Text(stringResource(R.string.no_sim), Modifier.padding(14.dp))
                     }
-                }
-                Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                val detail = listOfNotNull(call.number.takeIf { call.name != null }, call.accountLabel).joinToString(" · ")
-                if (detail.isNotBlank()) Text(detail, color = colors.onSurfaceVariant, textAlign = TextAlign.Center)
-                if ((active || holding) && call.connectedAt > 0) CallTimer(call)
-
-                ui.calls.filter { it.id != call.id }.forEach { OtherCall(it) }
-                if (call.state == Call.STATE_SELECT_PHONE_ACCOUNT) {
-                    if (call.accounts.isEmpty()) Text(stringResource(R.string.no_sim))
                     call.accounts.forEach { (account, label) ->
-                        OutlinedButton(onClick = { CallRuntime.selectAccount(call.id, account) }, modifier = Modifier.fillMaxWidth()) {
-                            Text(label)
-                        }
+                        AureOption(label, R.drawable.aure_sim, onClick = { CallRuntime.selectAccount(call.id, account) })
                     }
-                }
-                if (active || holding) {
-                    CallActions(call, ui, keypad, toggleKeypad, onAdd)
-                }
-                AnimatedVisibility(visible = active && keypad, enter = fadeIn(), exit = fadeOut()) {
-                    DtmfPad(call.id)
                 }
             }
+            if (compact && (active || holding)) {
+                CallDock(call, ui, keypad, toggleKeypad, addCall)
+            }
+        }
+        if (!compact && (active || holding)) {
+            CallDock(call, ui, keypad, toggleKeypad, addCall)
+        }
+        AureAction(
+            stringResource(R.string.end_call), { CallRuntime.action(call.id, "end") },
+            Modifier.fillMaxWidth().heightIn(min = 57.dp), R.drawable.aure_decline,
+            enabled = call.state != Call.STATE_DISCONNECTING,
+            color = Color(0xFFFFAEA8), ink = Color(0xFF481C1E),
+        )
+    }
+}
 
-            Button(
-                onClick = { CallRuntime.action(call.id, "end") },
-                enabled = call.state != Call.STATE_DISCONNECTING,
-                modifier = Modifier.padding(top = 12.dp).widthIn(max = 420.dp).fillMaxWidth().heightIn(min = 56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB52D40), contentColor = Color.White),
+@Composable
+internal fun CallFrame(content: @Composable ColumnScope.(Boolean) -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding(), contentAlignment = Alignment.Center) {
+        val compact = maxHeight < 650.dp || LocalDensity.current.fontScale > 1.23f
+        Column(
+            Modifier.widthIn(max = 525.dp).fillMaxSize().padding(horizontal = 19.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(11.dp),
+        ) { content(compact) }
+    }
+}
+
+@Composable
+internal fun CallStatusBar(label: String, connected: Boolean, call: CallView) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(Modifier.weight(1f)) {
+            val icon = when {
+                call.state == Call.STATE_HOLDING -> R.drawable.aure_pause
+                connected -> R.drawable.aure_wave
+                isIncomingRinging(call.state) -> R.drawable.aure_in
+                else -> R.drawable.aure_out
+            }
+            AureBadge(label, icon, color = scheme.surfaceVariant, ink = scheme.onSurface)
+        }
+        if (connected && call.connectedAt > 0) CallTimer(call)
+    }
+}
+
+@Composable
+internal fun CallIdentity(call: CallView, ringing: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val warning = call.verificationFailed
+    val accent = if (warning) scheme.error else scheme.primary
+    val name = call.name ?: if (ringing) null else call.number
+    val title = name ?: stringResource(R.string.unknown_caller)
+    AureCard(color = scheme.surface) {
+        Box(Modifier.fillMaxWidth()) {
+            CallSignal(Modifier.matchParentSize(), accent, ringing)
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Icon(painterResource(R.drawable.aure_decline), null, Modifier.size(21.dp))
-                Spacer(Modifier.width(9.dp))
-                Text(stringResource(R.string.end_call))
+                AureAvatar(
+                    call.name, size = 59.dp,
+                    glyph = if (warning) R.drawable.aure_shield_alert else R.drawable.aure_person,
+                    color = if (warning) scheme.errorContainer else scheme.primaryContainer,
+                    ink = if (warning) scheme.onErrorContainer else scheme.onPrimaryContainer,
+                )
+                Spacer(Modifier.height(17.dp))
+                Text(title, style = MaterialTheme.typography.displaySmall,
+                    maxLines = 3, overflow = TextOverflow.Ellipsis, color = scheme.onSurface)
+                val number = call.number?.takeIf { it != title }
+                val metadata = listOfNotNull(number, call.accountLabel).joinToString(" · ")
+                if (metadata.isNotBlank()) Text(metadata, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+                if (warning) {
+                    AureBadge(stringResource(R.string.number_verification_failed), R.drawable.aure_shield_alert,
+                        color = scheme.errorContainer, ink = scheme.onErrorContainer)
+                } else if (call.fromContacts) {
+                    AureBadge(stringResource(R.string.from_contacts), R.drawable.aure_shield_check)
+                }
             }
         }
     }
@@ -171,93 +250,130 @@ private fun CallTimer(call: CallView) {
             delay(1_000L - (elapsed % 1000))
         }
     }
-    Text(String.format(Locale.ROOT, "%02d:%02d", seconds / 60, seconds % 60),
-        style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(
+        String.format(Locale.ROOT, "%02d:%02d", seconds / 60, seconds % 60),
+        style = MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Monospace),
+        color = MaterialTheme.colorScheme.secondary,
+    )
 }
 
 @Composable
-private fun OtherCall(call: CallView) {
-    OutlinedCard(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(call.name ?: call.number ?: stringResource(R.string.unknown_caller), Modifier.weight(1f),
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (call.state == Call.STATE_HOLDING) {
-                TextButton(onClick = { CallRuntime.action(call.id, "hold") }) { Text(stringResource(R.string.resume_call)) }
+private fun SecondaryCall(call: CallView) {
+    val scheme = MaterialTheme.colorScheme
+    AureCard {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(call.name ?: call.number ?: stringResource(R.string.unknown_caller),
+                style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (call.state == Call.STATE_HOLDING) {
+                    AureAction(stringResource(R.string.resume_call), { CallRuntime.action(call.id, "hold") },
+                        Modifier.weight(1f), R.drawable.aure_play)
+                }
+                AureAction(stringResource(R.string.end_call), { CallRuntime.action(call.id, "end") },
+                    Modifier.weight(1f), R.drawable.aure_decline, color = scheme.errorContainer, ink = scheme.onErrorContainer)
             }
-            TextButton(onClick = { CallRuntime.action(call.id, "end") }) { Text(stringResource(R.string.end_call)) }
         }
     }
 }
 
 @Composable
-private fun CallActions(call: CallView, ui: CallUi, keypad: Boolean, toggleKeypad: () -> Unit, onAdd: () -> Unit) {
+private fun CallDock(call: CallView, ui: CallUi, keypad: Boolean, toggleKeypad: () -> Unit, addCall: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
     val active = call.state == Call.STATE_ACTIVE
-    val holding = call.state == Call.STATE_HOLDING
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.widthIn(max = 440.dp).fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = { CallRuntime.action(call.id, "mute") }, enabled = active, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(if (ui.muted) R.string.unmute else R.string.mute), textAlign = TextAlign.Center)
-                }
-                FilledTonalButton(onClick = toggleKeypad, enabled = active, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(if (keypad) R.string.close_keypad else R.string.dial), textAlign = TextAlign.Center)
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                RouteMenu(call.id, ui, active, Modifier.weight(1f))
-                FilledTonalButton(onClick = { CallRuntime.action(call.id, "hold") },
-                    enabled = holding || call.canHold, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(if (holding) R.string.resume_call else R.string.hold), textAlign = TextAlign.Center)
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (ui.canAddCall) {
-                    TextButton(onClick = onAdd, enabled = active, modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.add_call), textAlign = TextAlign.Center)
+    val held = call.state == Call.STATE_HOLDING
+    var routesOpen by remember(call.id) { mutableStateOf(false) }
+
+    AureCard {
+        AnimatedContent(
+            active && keypad, transitionSpec = {
+                (fadeIn(tween(180, delayMillis = 30)) + slideInVertically(tween(220)) { it / 12 })
+                    .togetherWith(fadeOut(tween(110)) + slideOutVertically(tween(140)) { -it / 14 })
+            },
+            label = "Call keypad",
+        ) { showDigits ->
+            Column(Modifier.fillMaxWidth().padding(9.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                if (showDigits) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 5.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(stringResource(R.string.call_keypad), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        AureIconButton(R.drawable.aure_close, stringResource(R.string.close_keypad), toggleKeypad)
                     }
-                }
-                if (call.canMerge) {
-                    TextButton(onClick = { CallRuntime.action(call.id, "merge") }, enabled = active, modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.merge_calls), textAlign = TextAlign.Center)
+                    DigitGrid { digit -> CallRuntime.action(call.id, "dtmf:" + digit) }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        CallTile(
+                            stringResource(if (ui.muted) R.string.unmute else R.string.mute),
+                            if (ui.muted) R.drawable.aure_mic_off else R.drawable.aure_mic,
+                            Modifier.weight(1f), active, selected = ui.muted,
+                        ) { CallRuntime.action(call.id, "mute") }
+                        CallTile(stringResource(R.string.dial), R.drawable.aure_grid, Modifier.weight(1f), active,
+                            onClick = toggleKeypad)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        val current = ui.routes.firstOrNull { it.key == ui.currentRoute }
+                        CallTile(
+                            stringResource(R.string.audio_output), R.drawable.aure_sound, Modifier.weight(1f),
+                            enabled = active && ui.routes.isNotEmpty(), subtitle = current?.name,
+                        ) { routesOpen = true }
+                        CallTile(
+                            stringResource(if (held) R.string.resume_call else R.string.hold),
+                            if (held) R.drawable.aure_play else R.drawable.aure_pause, Modifier.weight(1f),
+                            enabled = held || call.canHold, selected = held,
+                        ) { CallRuntime.action(call.id, "hold") }
+                    }
+                    if (ui.canAddCall || call.canMerge) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            if (ui.canAddCall) {
+                                AureAction(stringResource(R.string.add_call), addCall, Modifier.weight(1f),
+                                    R.drawable.aure_plus, enabled = active, color = scheme.surfaceContainer, ink = scheme.onSurface)
+                            }
+                            if (call.canMerge) {
+                                AureAction(stringResource(R.string.merge_calls), { CallRuntime.action(call.id, "merge") },
+                                    Modifier.weight(1f), R.drawable.aure_merge, enabled = active, color = scheme.surfaceContainer, ink = scheme.onSurface)
+                            }
+                        }
                     }
                 }
             }
         }
     }
-}
-
-@Composable
-private fun RouteMenu(callId: String, ui: CallUi, active: Boolean, modifier: Modifier) {
-    var expanded by remember(callId) { mutableStateOf(false) }
-    Box(modifier) {
-        val current = ui.routes.firstOrNull { it.key == ui.currentRoute }
-        FilledTonalButton(
-            onClick = { expanded = true }, enabled = active && ui.routes.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(current?.name ?: stringResource(R.string.audio_output), maxLines = 2,
-                overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-        }
-        DropdownMenu(expanded = expanded && active, onDismissRequest = { expanded = false }) {
-            ui.routes.forEach { route ->
-                DropdownMenuItem(text = { Text(route.name) }, enabled = route.key != ui.currentRoute,
-                    onClick = { expanded = false; CallRuntime.route(route.key) })
-            }
-        }
+    if (routesOpen && active) {
+        AureChoiceSheet(
+            stringResource(R.string.audio_output), ui.currentRoute,
+            ui.routes.map { SheetChoice(it.key, it.name, R.drawable.aure_sound) },
+            onDismiss = { routesOpen = false },
+            onChoose = { key -> if (key != null && key != ui.currentRoute) CallRuntime.route(key) },
+        )
     }
 }
 
 @Composable
-private fun DtmfPad(callId: String) {
-    Column(Modifier.widthIn(max = 360.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        listOf("123", "456", "789", "*0#").forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { digit ->
-                    FilledTonalButton(onClick = { CallRuntime.action(callId, "dtmf:$digit") },
-                        modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(digit.toString()) }
-                }
-            }
+private fun CallTile(
+    label: String, @DrawableRes glyph: Int, modifier: Modifier, enabled: Boolean,
+    selected: Boolean = false, subtitle: String? = null, onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val color by animateColorAsState(
+        if (selected) scheme.primaryContainer else scheme.surfaceContainer, tween(190), label = "Call control selected",
+    )
+    val ink = when {
+        !enabled -> scheme.onSurfaceVariant.copy(alpha = 0.65f)
+        selected -> scheme.onPrimaryContainer
+        else -> scheme.onSurface
+    }
+    Row(
+        modifier.clip(AureShapes.medium).background(color)
+            .pressable(enabled, onClick = onClick).semantics { this.selected = selected }
+            .heightIn(min = 60.dp).padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        AureGlyph(glyph, size = 22.dp, tint = if (enabled) scheme.primary else ink)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, style = MaterialTheme.typography.labelLarge, color = ink)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
